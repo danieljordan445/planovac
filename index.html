@@ -115,7 +115,7 @@ input[type=number]{-moz-appearance:textfield;}
   <div id="bnav">
     <button class="nbtn" data-t="calendar" onclick="setTab('calendar')"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg><span>Plán</span></button>
     <button class="nbtn on" data-t="habits" onclick="setTab('habits')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span>Návyky</span></button>
-    <button class="nbtn" data-t="nutrition" onclick="setTab('nutrition')"><svg viewBox="0 0 24 24"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg><span>Kalorie</span></button>
+    <button class="nbtn" data-t="nutrition" onclick="setTab('nutrition')"><svg viewBox="0 0 24 24"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3zm0 0v7"/></svg><span>Kalorie</span></button>
     <button class="nbtn" data-t="body" onclick="setTab('body')"><svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg><span>Tělo</span></button>
     <button class="nbtn" data-t="yearly" onclick="setTab('yearly')"><svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><span>Rok</span></button>
   </div>
@@ -388,7 +388,8 @@ function rHabits(m){
     habitLabels+='<div style="position:absolute;left:0;top:'+topPct+'%;transform:translateY(-50%);display:flex;align-items:center;gap:4px;pointer-events:none;">'
       +'<span style="color:var(--muted);font-size:7px;width:10px;text-align:right;">'+(i+1)+'.</span>'
       +'<span style="color:var(--acc);font-size:7px;width:24px;">['+stats[i]+'%]</span>'
-      +'<input class="fi hn" data-i="'+i+'" value="'+habits[i]+'" placeholder="Návyk…" maxlength="20" style="font-size:9px;font-weight:700;color:var(--text);width:90px;pointer-events:auto;">'
+      +'<input class="fi hn" data-i="'+i+'" value="'+habits[i]+'" placeholder="Návyk…" maxlength="20" style="font-size:9px;font-weight:700;color:var(--text);width:80px;pointer-events:auto;">'
+      +(habits.length>1?'<button class="del-habit" data-i="'+i+'" style="pointer-events:auto;background:transparent;border:none;cursor:pointer;color:var(--muted);font-size:13px;padding:0 2px;line-height:1;">✕</button>':'')
       +'</div>';
   }
 
@@ -396,11 +397,14 @@ function rHabits(m){
   var fp='';
   if(S.fd!==null){
     var prevD=S.fd>0?S.fd-1:null,nextD=S.fd<dim-1?S.fd+1:null;
-    fp='<div class="card">'
-      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">'
-      +'<button id="prev-day" style="background:var(--bg3);border:1px solid var(--border2);border-radius:5px;width:28px;height:28px;cursor:pointer;color:'+(prevD!==null?'var(--text)':'var(--muted)')+';font-size:16px;display:flex;align-items:center;justify-content:center;" '+(prevD===null?'disabled':'')+'>‹</button>'
-      +'<div class="card-title" style="margin:0;font-size:10px;">'+(S.fd+1)+'. '+MONTHS[m]+'</div>'
-      +'<button id="next-day" style="background:var(--bg3);border:1px solid var(--border2);border-radius:5px;width:28px;height:28px;cursor:pointer;color:'+(nextD!==null?'var(--text)':'var(--muted)')+';font-size:16px;display:flex;align-items:center;justify-content:center;" '+(nextD===null?'disabled':'')+'>›</button>'
+    fp='<div class="card" style="width:100%;max-width:340px;margin:0 auto;">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">'
+      +'<button id="prev-day" style="background:var(--bg3);border:1px solid var(--border2);border-radius:5px;width:36px;height:36px;cursor:pointer;color:'+(prevD!==null?'var(--text)':'var(--muted)')+';font-size:18px;display:flex;align-items:center;justify-content:center;flex-shrink:0;" '+(prevD===null?'disabled':'')+'>‹</button>'
+      +'<div style="text-align:center;flex:1;padding:0 8px;">'
+      +'<div style="color:var(--acc);font-size:13px;font-weight:700;">'+(S.fd+1)+'. '+MONTHS[m]+'</div>'
+      +'<div style="color:var(--muted);font-size:9px;">'+['Po','Út','St','Čt','Pá','So','Ne'][(new Date(YEAR,m,S.fd+1).getDay()+6)%7]+'</div>'
+      +'</div>'
+      +'<button id="next-day" style="background:var(--bg3);border:1px solid var(--border2);border-radius:5px;width:36px;height:36px;cursor:pointer;color:'+(nextD!==null?'var(--text)':'var(--muted)')+';font-size:18px;display:flex;align-items:center;justify-content:center;flex-shrink:0;" '+(nextD===null?'disabled':'')+'>›</button>'
       +'</div>';
     for(var hi=0;hi<habits.length;hi++){
       var s=data[hi+'-'+S.fd]||null;
@@ -469,6 +473,25 @@ function bHabits(m){
   var hns=document.querySelectorAll('.hn');
   for(var i=0;i<hns.length;i++){
     hns[i].addEventListener('input',function(){habits[+this.dataset.i]=this.value;setH(m,habits);});
+  }
+  var dels=document.querySelectorAll('.del-habit');
+  for(var i=0;i<dels.length;i++){
+    dels[i].addEventListener('click',function(){
+      var idx=+this.dataset.i;
+      if(habits.length<=1)return;
+      // Odstraň návyk a jeho data
+      habits.splice(idx,1);
+      // Přečísluj data — všechny klíče h-d kde h>idx snížit o 1
+      var newData={};
+      var keys2=Object.keys(data);
+      for(var j=0;j<keys2.length;j++){
+        var parts=keys2[j].split('-'),h2=+parts[0],d2=+parts[1];
+        if(h2===idx)continue; // mazaný návyk — skip
+        var newH=h2>idx?h2-1:h2;
+        newData[newH+'-'+d2]=data[keys2[j]];
+      }
+      setH(m,habits);setD(m,newData);render();
+    });
   }
   var adh=document.getElementById('adh');
   if(adh)adh.addEventListener('click',function(){if(habits.length<14){habits.push('');setH(m,habits);render();}});
