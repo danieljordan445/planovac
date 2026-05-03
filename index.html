@@ -192,7 +192,7 @@ function chkSvg(c,s){
 }
 
 // State
-var S={tab:'habits',month:new Date().getMonth(),fd:null};
+var S={tab:'habits',month:new Date().getMonth(),fd:null,delMode:false};
 
 // Backup
 function doExport(){
@@ -246,7 +246,7 @@ function autoBackup(){
 
 // Navigation
 function setTab(t){
-  S.tab=t;S.fd=null;
+  S.tab=t;S.fd=null;S.delMode=false;
   var btns=document.querySelectorAll('.nbtn');
   for(var i=0;i<btns.length;i++)btns[i].classList.toggle('on',btns[i].dataset.t===t);
   var sm=(t==='habits'||t==='nutrition'||t==='calendar');
@@ -255,7 +255,7 @@ function setTab(t){
   render();
 }
 function setMonth(m){
-  S.month=m;S.fd=null;
+  S.month=m;S.fd=null;S.delMode=false;
   var btns=document.querySelectorAll('.mbtn');
   for(var i=0;i<btns.length;i++)btns[i].classList.toggle('on',+btns[i].dataset.m===m);
   document.getElementById('mname').textContent=MONTHS[m];
@@ -389,7 +389,7 @@ function rHabits(m){
       +'<span style="color:var(--muted);font-size:7px;width:10px;text-align:right;">'+(i+1)+'.</span>'
       +'<span style="color:var(--acc);font-size:7px;width:24px;">['+stats[i]+'%]</span>'
       +'<input class="fi hn" data-i="'+i+'" value="'+habits[i]+'" placeholder="Návyk…" maxlength="20" style="font-size:9px;font-weight:700;color:var(--text);width:80px;pointer-events:auto;">'
-      +(habits.length>1?'<button class="del-habit" data-i="'+i+'" style="pointer-events:auto;background:transparent;border:none;cursor:pointer;color:var(--muted);font-size:13px;padding:0 2px;line-height:1;">✕</button>':'')
+      +(S.delMode&&habits.length>1?'<button class="del-habit" data-i="'+i+'" style="pointer-events:auto;background:var(--red);border:none;border-radius:3px;cursor:pointer;color:#fff;font-size:11px;padding:1px 5px;line-height:1.4;">✕</button>':'')
       +'</div>';
   }
 
@@ -437,9 +437,9 @@ function rHabits(m){
     +'</div>'
     +fp
     +'<div style="display:flex;align-items:center;gap:10px;margin-top:2px;">'
-    +'<button id="rmh" style="width:28px;height:28px;border-radius:50%;background:var(--bg3);border:none;color:var(--text);cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;" '+(habits.length<=1?'disabled':'')+'>−</button>'
-    +'<span style="font-size:9px;color:var(--muted);width:58px;text-align:center;">'+habits.length+' návyků</span>'
-    +'<button id="adh" style="width:28px;height:28px;border-radius:50%;background:var(--acc);border:none;color:#000;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;" '+(habits.length>=14?'disabled':'')+'>+</button>'
+    +'<button id="rmh" style="width:28px;height:28px;border-radius:50%;background:'+(S.delMode?'var(--red)':'var(--bg3)')+';border:none;color:'+(S.delMode?'#fff':'var(--text)')+';cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;" '+(habits.length<=1?'disabled':'')+'>−</button>'
+    +'<span style="font-size:9px;color:'+(S.delMode?'var(--red)':'var(--muted)')+';width:58px;text-align:center;">'+(S.delMode?'vyber':''+habits.length+' návyků')+'</span>'
+    +'<button id="adh" style="width:28px;height:28px;border-radius:50%;background:var(--acc);border:none;color:#000;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;" '+(habits.length>=14||S.delMode?'disabled':'')+(S.delMode?' style="opacity:.3"':'')+'>+</button>'
     +'</div>'
     +(showCp?'<button id="cph" style="background:transparent;border:1px dashed var(--border2);border-radius:5px;padding:5px 12px;color:var(--muted);font-size:9px;cursor:pointer;">⎘ Načíst z '+MONTHS[S.month-1]+' ('+prevH.length+' návyků)</button>':'')
     +'</div>';
@@ -479,24 +479,26 @@ function bHabits(m){
     dels[i].addEventListener('click',function(){
       var idx=+this.dataset.i;
       if(habits.length<=1)return;
-      // Odstraň návyk a jeho data
       habits.splice(idx,1);
-      // Přečísluj data — všechny klíče h-d kde h>idx snížit o 1
       var newData={};
       var keys2=Object.keys(data);
       for(var j=0;j<keys2.length;j++){
         var parts=keys2[j].split('-'),h2=+parts[0],d2=+parts[1];
-        if(h2===idx)continue; // mazaný návyk — skip
+        if(h2===idx)continue;
         var newH=h2>idx?h2-1:h2;
         newData[newH+'-'+d2]=data[keys2[j]];
       }
+      S.delMode=false;
       setH(m,habits);setD(m,newData);render();
     });
   }
   var adh=document.getElementById('adh');
-  if(adh)adh.addEventListener('click',function(){if(habits.length<14){habits.push('');setH(m,habits);render();}});
+  if(adh)adh.addEventListener('click',function(){if(habits.length<14&&!S.delMode){habits.push('');setH(m,habits);render();}});
   var rmh=document.getElementById('rmh');
-  if(rmh)rmh.addEventListener('click',function(){if(habits.length>1){habits.pop();setH(m,habits);render();}});
+  if(rmh)rmh.addEventListener('click',function(){
+    if(habits.length<=1)return;
+    S.delMode=!S.delMode;render();
+  });
   var cph=document.getElementById('cph');
   if(cph)cph.addEventListener('click',function(){
     var p=getH(m-1);
