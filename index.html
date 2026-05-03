@@ -367,13 +367,16 @@ function rHabits(m){
       ringPaths+='<path d="'+arcPath(rI,rO,d*APD,(d+1)*APD-.3)+'" fill="'+fill+'" stroke="'+strokeC+'" stroke-width="'+strokeW+'" opacity="'+(dim2?.12:1)+'" data-h="'+h+'" data-d="'+d+'" class="rs" style="cursor:pointer"/>';
     }
   }
+  // Day labels — outside rotating group, positions rotated mathematically
+  var dayLabels='';
   for(var d=0;d<dim;d++){
-    var pos=pol(INNER+habits.length*TW+9,d*APD+APD/2);
+    var angle=d*APD+APD/2+rotDeg;
+    var pos=pol(INNER+habits.length*TW+9,angle);
     var isT=now&&d===td,isP=perf[d],isFd=S.fd===d,dim2=S.fd!==null&&d!==S.fd;
     var fs=isFd||isT?9:6,fw=isP||isT||isFd?700:400;
     var fill=isFd?'#fff':(isP||isT?'#CCFF00':'#383838');
     var op=dim2?.2:1;
-    ringPaths+='<text x="'+pos.x.toFixed(1)+'" y="'+pos.y.toFixed(1)+'" text-anchor="middle" dominant-baseline="middle" font-size="'+fs+'" font-weight="'+fw+'" fill="'+fill+'" opacity="'+op+'" data-day="'+d+'" class="dl" style="cursor:pointer'+(isT?';filter:drop-shadow(0 0 3px #CCFF00)':'')+'">'+(d+1)+'</text>';
+    dayLabels+='<text x="'+pos.x.toFixed(1)+'" y="'+pos.y.toFixed(1)+'" text-anchor="middle" dominant-baseline="middle" font-size="'+fs+'" font-weight="'+fw+'" fill="'+fill+'" opacity="'+op+'" data-day="'+d+'" class="dl" style="cursor:pointer'+(isT?';filter:drop-shadow(0 0 3px #CCFF00)':'')+'">'+(d+1)+'</text>';
   }
 
   // Habit labels left of ring
@@ -421,6 +424,7 @@ function rHabits(m){
     +'<svg viewBox="0 0 300 300" width="300" height="300">'
     +'<circle cx="'+CX+'" cy="'+CY+'" r="'+(INNER-3)+'" fill="#111" stroke="#1a1a1a" stroke-width="1"/>'
     +'<g style="transform:rotate('+rotDeg+'deg);transform-origin:'+CX+'px '+CY+'px;transition:transform 0.5s cubic-bezier(0.4,0,0.2,1);">'+ringPaths+'</g>'
+    +dayLabels
     +'<circle cx="'+CX+'" cy="'+CY+'" r="'+(INNER-3)+'" fill="transparent" id="center-touch" style="cursor:pointer"/>'
     +'<text x="'+CX+'" y="'+(CY-4)+'" text-anchor="middle" font-size="8" fill="'+(S.fd!==null?'var(--acc)':'#555')+'" font-weight="700" pointer-events="none">'+centerLabel+'</text>'
     +'<text x="'+CX+'" y="'+(CY+6)+'" text-anchor="middle" font-size="6" fill="#333" pointer-events="none">'+centerSub+'</text>'
