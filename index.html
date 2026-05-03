@@ -3,10 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<meta name="apple-mobile-web-app-capable" content="yes">
 <title>Plánovač</title>
 <style>
-:root{--acc:#CCFF00;--acc2:#3399FF;--red:#FF3366;--bg:#0d0d0d;--bg2:#141414;--bg3:#1c1c1c;--bg4:#222;--border:#252525;--border2:#333;--text:#ddd;--muted:#555;--muted2:#888;--font:'SF Mono','Fira Code','Courier New',monospace;--r:8px;}
+:root{--acc:#CCFF00;--acc2:#3399FF;--red:#FF3366;--bg:#0d0d0d;--bg2:#141414;--bg3:#1c1c1c;--border:#252525;--border2:#333;--text:#ddd;--muted:#555;--muted2:#888;--font:'SF Mono','Fira Code','Courier New',monospace;--r:8px;}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
 html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font);overflow:hidden;}
 input,textarea,button{font-family:var(--font);}
@@ -77,7 +76,8 @@ input[type=number]{-moz-appearance:textfield;}
 .banner{background:rgba(255,51,102,.1);border-bottom:1px solid rgba(255,51,102,.3);padding:5px 14px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
 .ymgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
 .ymcard{background:var(--bg3);border-radius:6px;padding:8px;border:1px solid var(--border);}
-.acc{color:var(--acc);}.acc2{color:var(--acc2);}.red{color:var(--red);}.mut{color:var(--muted);}
+.acc{color:var(--acc);}.acc2{color:var(--acc2);}.red{color:var(--red);}
+.hidden{display:none!important;}
 </style>
 </head>
 <body>
@@ -91,7 +91,7 @@ input[type=number]{-moz-appearance:textfield;}
       <div class="htitle">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--acc)" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
         <span>Plánovač</span>
-        <span style="color:var(--muted);font-size:8px;">v3.4</span>
+        <span style="color:var(--muted);font-size:8px;">v3.5</span>
       </div>
       <div class="hactions">
         <button class="bpill" id="bpill" onclick="doExport()">
@@ -124,335 +124,689 @@ input[type=number]{-moz-appearance:textfield;}
   <div class="modal" id="mcontent"></div>
 </div>
 <script>
-const YEAR=2026,BK='habit_tracker_last_backup';
-const MONTHS=['Leden','Únor','Březen','Duben','Květen','Červen','Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
-const DAYS=['Po','Út','St','Čt','Pá','So','Ne'];
-const COLORS=['#FF3366','#22D3EE','#FACC15','#A78BFA','#4ADE80','#FB923C'];
+var YEAR=2026,BK='habit_tracker_last_backup';
+var MONTHS=['Leden','Únor','Březen','Duben','Květen','Červen','Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
+var DAYS=['Po','Út','St','Čt','Pá','So','Ne'];
+var COLORS=['#FF3366','#22D3EE','#FACC15','#A78BFA','#4ADE80','#FB923C'];
 
-// Storage — identické klíče jako původní app (zpětná kompatibilita)
-const sg=(k,fb)=>{try{const v=localStorage.getItem(k);if(!v)return fb;const p=JSON.parse(v);return p??fb;}catch{return fb;}};
-const ss=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch{}};
-const K={habits:m=>`habit_tracker_habits_${m}`,data:m=>`habit_tracker_data_${m}`,nutr:m=>`habit_tracker_nutrition_data_${m}`,metrics:m=>`habit_tracker_body_metrics_v2_${m}`,defs:()=>'habit_tracker_metric_definitions',focus:m=>`habit_tracker_weekly_focus_v3_${m}`};
-const getH=m=>sg(K.habits(m),['Vitaminy','Kreatin','Protein']);const setH=(m,v)=>ss(K.habits(m),v);
-const getD=m=>sg(K.data(m),{});const setD=(m,v)=>ss(K.data(m),v);
-const getN=m=>sg(K.nutr(m),{});const setN=(m,v)=>ss(K.nutr(m),v);
-const getM=m=>sg(K.metrics(m),{});const setM=(m,v)=>ss(K.metrics(m),v);
-const getDefs=()=>sg(K.defs(),[{id:'weight',label:'Váha (kg)',color:COLORS[0]},{id:'waist',label:'Pas (cm)',color:COLORS[1]},{id:'fat',label:'% Tuku',color:COLORS[3]}]);
-const setDefs=v=>ss(K.defs(),v);
-const getF=m=>{const s=sg(K.focus(m),[]);const b=Array.from({length:31},()=>({text:'',status:null}));if(Array.isArray(s))s.forEach((x,i)=>{if(i<31&&x)b[i]={...x};});return b;};
-const setF=(m,v)=>ss(K.focus(m),v);
+// Storage
+function sg(k,fb){try{var v=localStorage.getItem(k);if(!v)return fb;var p=JSON.parse(v);return p==null?fb:p;}catch(e){return fb;}}
+function ss(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
+
+// Data keys — same as original app
+function kH(m){return 'habit_tracker_habits_'+m;}
+function kD(m){return 'habit_tracker_data_'+m;}
+function kN(m){return 'habit_tracker_nutrition_data_'+m;}
+function kM(m){return 'habit_tracker_body_metrics_v2_'+m;}
+function kF(m){return 'habit_tracker_weekly_focus_v3_'+m;}
+var KDEFS='habit_tracker_metric_definitions';
+
+function getH(m){return sg(kH(m),['Vitaminy','Kreatin','Protein']);}
+function setH(m,v){ss(kH(m),v);}
+function getD(m){return sg(kD(m),{});}
+function setD(m,v){ss(kD(m),v);}
+function getN(m){return sg(kN(m),{});}
+function setN(m,v){ss(kN(m),v);}
+function getM(m){return sg(kM(m),{});}
+function setMet(m,v){ss(kM(m),v);}
+function getDefs(){return sg(KDEFS,[{id:'weight',label:'Váha (kg)',color:COLORS[0]},{id:'waist',label:'Pas (cm)',color:COLORS[1]},{id:'fat',label:'% Tuku',color:COLORS[3]}]);}
+function setDefs(v){ss(KDEFS,v);}
+function getF(m){
+  var s=sg(kF(m),[]);
+  var b=[];
+  for(var i=0;i<31;i++)b.push({text:'',status:null});
+  if(Array.isArray(s)){for(var i=0;i<s.length&&i<31;i++){if(s[i])b[i]=s[i];}}
+  return b;
+}
+function setF(m,v){ss(kF(m),v);}
 
 // Helpers
-const daysIn=m=>new Date(YEAR,m+1,0).getDate();
-const firstDow=m=>(new Date(YEAR,m,1).getDay()+6)%7;
-const suns=m=>{const r=[],d=new Date(YEAR,m,1);d.setDate(d.getDate()+(d.getDay()===0?0:7-d.getDay()));while(d.getMonth()===m){r.push(new Date(d));d.setDate(d.getDate()+7);}return r;};
-const wks=m=>{const c=[...Array(firstDow(m)).fill(null),...Array.from({length:daysIn(m)},(_,i)=>i+1)],w=[];for(let i=0;i<c.length;i+=7){const r=c.slice(i,i+7);while(r.length<7)r.push(null);w.push(r);}return w;};
-const isCM=m=>new Date().getMonth()===m;
-const todD=()=>new Date().getDate();
-const chkSvg=(c,s)=>s==='done'?`<svg width="${c}" height="${c}" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>`:s==='fail'?`<svg width="${c}" height="${c}" viewBox="0 0 24 24" fill="none" stroke="var(--acc2)" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`:'';
+function daysIn(m){return new Date(YEAR,m+1,0).getDate();}
+function firstDow(m){return (new Date(YEAR,m,1).getDay()+6)%7;}
+function getSuns(m){
+  var r=[],d=new Date(YEAR,m,1);
+  var skip=d.getDay()===0?0:7-d.getDay();
+  d.setDate(d.getDate()+skip);
+  while(d.getMonth()===m){r.push(new Date(d));d.setDate(d.getDate()+7);}
+  return r;
+}
+function getWks(m){
+  var dim=daysIn(m),fd=firstDow(m);
+  var cells=[];
+  for(var i=0;i<fd;i++)cells.push(null);
+  for(var i=1;i<=dim;i++)cells.push(i);
+  var w=[];
+  for(var i=0;i<cells.length;i+=7){
+    var row=cells.slice(i,i+7);
+    while(row.length<7)row.push(null);
+    w.push(row);
+  }
+  return w;
+}
+function isCM(m){return new Date().getMonth()===m;}
+function todD(){return new Date().getDate();}
+function chkSvg(c,s){
+  if(s==='done')return '<svg width="'+c+'" height="'+c+'" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>';
+  if(s==='fail')return '<svg width="'+c+'" height="'+c+'" viewBox="0 0 24 24" fill="none" stroke="var(--acc2)" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+  return '';
+}
 
 // State
-const S={tab:'habits',month:new Date().getMonth(),fd:null};
+var S={tab:'habits',month:new Date().getMonth(),fd:null};
 
 // Backup
 function doExport(){
-  try{const d={};for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k?.startsWith('habit_tracker_')&&k!==BK)d[k]=localStorage.getItem(k);}
-  if(!Object.keys(d).length){alert('Žádná data.');return;}
-  const b=new Blob([JSON.stringify(d,null,2)],{type:'application/json'}),u=URL.createObjectURL(b),a=document.createElement('a');
-  a.href=u;a.download=`planovac_${new Date().toISOString().slice(0,10)}.json`;a.click();URL.revokeObjectURL(u);
-  ss(BK,new Date().toISOString());updateBUI();
-  const l=document.getElementById('blbl');if(l){l.textContent='✓ Staženo';setTimeout(updateBUI,2000);}
+  try{
+    var d={};
+    for(var i=0;i<localStorage.length;i++){
+      var k=localStorage.key(i);
+      if(k&&k.indexOf('habit_tracker_')===0&&k!==BK)d[k]=localStorage.getItem(k);
+    }
+    if(!Object.keys(d).length){alert('Žádná data.');return;}
+    var b=new Blob([JSON.stringify(d,null,2)],{type:'application/json'});
+    var u=URL.createObjectURL(b),a=document.createElement('a');
+    a.href=u;a.download='planovac_'+new Date().toISOString().slice(0,10)+'.json';a.click();URL.revokeObjectURL(u);
+    ss(BK,new Date().toISOString());updateBUI();
+    var l=document.getElementById('blbl');if(l){l.textContent='✓ Staženo';setTimeout(updateBUI,2000);}
   }catch(e){alert('Export selhal: '+e.message);}
 }
-function doImport(file){const r=new FileReader();r.onload=e=>{try{const d=JSON.parse(e.target.result);Object.keys(d).forEach(k=>{if(k.startsWith('habit_tracker_'))localStorage.setItem(k,d[k]);});alert('Data načtena!');location.reload();}catch{alert('Chyba souboru.');}};r.readAsText(file);}
+function doImport(file){
+  var r=new FileReader();
+  r.onload=function(e){
+    try{
+      var d=JSON.parse(e.target.result);
+      Object.keys(d).forEach(function(k){if(k.indexOf('habit_tracker_')===0)localStorage.setItem(k,d[k]);});
+      alert('Data načtena!');location.reload();
+    }catch(ex){alert('Chyba souboru.');}
+  };
+  r.readAsText(file);
+}
 function updateBUI(){
-  const v=sg(BK,null),pill=document.getElementById('bpill'),lbl=document.getElementById('blbl'),banner=document.getElementById('ubanner'),uage=document.getElementById('uage');
-  if(!v){if(lbl)lbl.textContent='Záloha: nikdy';if(pill)pill.style.color='var(--red)';if(banner)banner.classList.remove('hidden');if(uage)uage.textContent='nikdy';return;}
-  const days=Math.floor((Date.now()-new Date(v).getTime())/86400000),txt=days===0?'dnes':days===1?'včera':`před ${days}d`;
-  if(lbl)lbl.textContent=`Záloha: ${txt}`;if(pill)pill.style.color=days>3?'var(--red)':days>0?'var(--muted)':'var(--acc)';
+  var v=sg(BK,null);
+  var pill=document.getElementById('bpill'),lbl=document.getElementById('blbl');
+  var banner=document.getElementById('ubanner'),uage=document.getElementById('uage');
+  if(!v){
+    if(lbl)lbl.textContent='Záloha: nikdy';
+    if(pill)pill.style.color='var(--red)';
+    if(banner)banner.classList.remove('hidden');
+    if(uage)uage.textContent='nikdy';
+    return;
+  }
+  var days=Math.floor((Date.now()-new Date(v).getTime())/86400000);
+  var txt=days===0?'dnes':days===1?'včera':'před '+days+'d';
+  if(lbl)lbl.textContent='Záloha: '+txt;
+  if(pill)pill.style.color=days>3?'var(--red)':days>0?'var(--muted)':'var(--acc)';
   if(banner){if(days>3){banner.classList.remove('hidden');if(uage)uage.textContent=txt;}else banner.classList.add('hidden');}
 }
-function autoBackup(){const v=sg(BK,null),t=new Date().toISOString().slice(0,10),l=v?new Date(v).toISOString().slice(0,10):null;if(l!==t)setTimeout(doExport,3500);}
+function autoBackup(){
+  var v=sg(BK,null),t=new Date().toISOString().slice(0,10);
+  var l=v?new Date(v).toISOString().slice(0,10):null;
+  if(l!==t)setTimeout(doExport,3500);
+}
 
 // Navigation
-function setTab(t){S.tab=t;S.fd=null;document.querySelectorAll('.nbtn').forEach(b=>b.classList.toggle('on',b.dataset.t===t));const sm=['habits','nutrition','calendar'].includes(t);document.getElementById('mnav').style.display=sm?'flex':'none';document.getElementById('hmonth').style.display=sm?'flex':'none';render();}
-function setMonth(m){S.month=m;S.fd=null;document.querySelectorAll('.mbtn').forEach(b=>b.classList.toggle('on',+b.dataset.m===m));document.getElementById('mname').textContent=MONTHS[m];render();}
+function setTab(t){
+  S.tab=t;S.fd=null;
+  var btns=document.querySelectorAll('.nbtn');
+  for(var i=0;i<btns.length;i++)btns[i].classList.toggle('on',btns[i].dataset.t===t);
+  var sm=(t==='habits'||t==='nutrition'||t==='calendar');
+  document.getElementById('mnav').style.display=sm?'flex':'none';
+  document.getElementById('hmonth').style.display=sm?'flex':'none';
+  render();
+}
+function setMonth(m){
+  S.month=m;S.fd=null;
+  var btns=document.querySelectorAll('.mbtn');
+  for(var i=0;i<btns.length;i++)btns[i].classList.toggle('on',+btns[i].dataset.m===m);
+  document.getElementById('mname').textContent=MONTHS[m];
+  render();
+}
 function prevM(){if(S.month>0)setMonth(S.month-1);}
 function nextM(){if(S.month<11)setMonth(S.month+1);}
-function buildMnav(){document.getElementById('mnav').innerHTML=MONTHS.map((n,i)=>`<button class="mbtn${i===S.month?' on':''}" data-m="${i}" onclick="setMonth(${i})">${n.slice(0,3)}</button>`).join('');}
+function buildMnav(){
+  var html='';
+  for(var i=0;i<MONTHS.length;i++){
+    html+='<button class="mbtn'+(i===S.month?' on':'')+'" data-m="'+i+'" onclick="setMonth('+i+')">'+MONTHS[i].slice(0,3)+'</button>';
+  }
+  document.getElementById('mnav').innerHTML=html;
+}
 
 // Modal
 function openModal(){document.getElementById('modal').classList.remove('hidden');document.getElementById('mcontent').innerHTML=diagHTML();}
 function closeModal(){document.getElementById('modal').classList.add('hidden');}
 function diagHTML(){
-  let keys=[],total=0,bad=0;
-  for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(!k?.startsWith('habit_tracker_')||k===BK)continue;const v=localStorage.getItem(k)||'';total+=v.length;let ok=true;try{JSON.parse(v);}catch{ok=false;bad++;}keys.push({k,ok});}
-  return`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;"><h2 style="margin:0;">Správa dat</h2><button onclick="closeModal()" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:18px;">✕</button></div>
-  <div class="sgrid" style="margin-bottom:12px;">
-    <div class="sbox"><div class="slabel">Klíče</div><div class="sval">${keys.length}</div></div>
-    <div class="sbox"><div class="slabel">Velikost</div><div class="sval">${Math.round(total/1024)} KB</div></div>
-    <div class="sbox"><div class="slabel">Poškozené</div><div class="sval" style="color:${bad>0?'var(--red)':'var(--acc)'}">${bad}</div></div>
-    <div class="sbox"><div class="slabel">Status</div><div class="sval acc">OK</div></div>
-  </div>
-  <button class="btn btn-full btn-acc" onclick="doExport()">💾 Export zálohy</button>
-  <label class="btn btn-full" style="cursor:pointer;justify-content:center;">📂 Import zálohy<input type="file" accept=".json" style="display:none;" onchange="doImport(this.files[0])"></label>
-  ${bad?`<button class="btn btn-full" style="background:rgba(255,51,102,.12);color:var(--red);border:1px solid var(--red);" onclick="repairData()">🔧 Opravit poškozené (${bad})</button>`:''}
-  <button class="btn btn-full" style="color:var(--muted);" onclick="closeModal()">Zavřít</button>`;
+  var keys=[],total=0,bad=0;
+  for(var i=0;i<localStorage.length;i++){
+    var k=localStorage.key(i);
+    if(!k||k.indexOf('habit_tracker_')<0||k===BK)continue;
+    var v=localStorage.getItem(k)||'';total+=v.length;
+    var ok=true;try{JSON.parse(v);}catch(e){ok=false;bad++;}
+    keys.push({k:k,ok:ok});
+  }
+  return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;"><h2 style="margin:0;">Správa dat</h2><button onclick="closeModal()" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:18px;">✕</button></div>'
+    +'<div class="sgrid" style="margin-bottom:12px;">'
+    +'<div class="sbox"><div class="slabel">Klíče</div><div class="sval">'+keys.length+'</div></div>'
+    +'<div class="sbox"><div class="slabel">Velikost</div><div class="sval">'+Math.round(total/1024)+' KB</div></div>'
+    +'<div class="sbox"><div class="slabel">Poškozené</div><div class="sval" style="color:'+(bad>0?'var(--red)':'var(--acc)')+'">'+bad+'</div></div>'
+    +'<div class="sbox"><div class="slabel">Status</div><div class="sval acc">OK</div></div>'
+    +'</div>'
+    +'<button class="btn btn-full btn-acc" onclick="doExport()">💾 Export zálohy</button>'
+    +'<label class="btn btn-full" style="cursor:pointer;justify-content:center;">📂 Import zálohy<input type="file" accept=".json" style="display:none;" onchange="doImport(this.files[0])"></label>'
+    +(bad?'<button class="btn btn-full" style="background:rgba(255,51,102,.12);color:var(--red);border:1px solid var(--red);" onclick="repairData()">🔧 Opravit poškozené ('+bad+')</button>':'')
+    +'<button class="btn btn-full" style="color:var(--muted);" onclick="closeModal()">Zavřít</button>';
 }
-function repairData(){let f=0;for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(!k?.startsWith('habit_tracker_'))continue;try{JSON.parse(localStorage.getItem(k));}catch{localStorage.removeItem(k);f++;i--;}}alert(`Opraveno ${f}.`);location.reload();}
+function repairData(){
+  var f=0;
+  for(var i=0;i<localStorage.length;i++){
+    var k=localStorage.key(i);
+    if(!k||k.indexOf('habit_tracker_')<0)continue;
+    try{JSON.parse(localStorage.getItem(k));}catch(e){localStorage.removeItem(k);f++;i--;}
+  }
+  alert('Opraveno '+f+'.');location.reload();
+}
 
+// Render
 function render(){
-  const c=document.getElementById('content'),m=S.month;
-  switch(S.tab){case 'habits':c.innerHTML=rHabits(m);bHabits(m);break;case 'nutrition':c.innerHTML=rNutr(m);bNutr(m);break;case 'body':c.innerHTML=rBody(m);bBody(m);break;case 'calendar':c.innerHTML=rCal(m);bCal(m);break;case 'yearly':c.innerHTML=rYear();break;}
+  var c=document.getElementById('content'),m=S.month;
+  if(S.tab==='habits'){c.innerHTML=rHabits(m);bHabits(m);}
+  else if(S.tab==='nutrition'){c.innerHTML=rNutr(m);bNutr(m);}
+  else if(S.tab==='body'){c.innerHTML=rBody(m);bBody(m);}
+  else if(S.tab==='calendar'){c.innerHTML=rCal(m);bCal(m);}
+  else if(S.tab==='yearly'){c.innerHTML=rYear();}
 }
 
 // ── HABITS ──
-// S.fd = null (přehled) nebo číslo dne (focus mód s rotací)
 function rHabits(m){
-  const habits=getH(m),data=getD(m),dim=daysIn(m),now=isCM(m),td=todD()-1;
-  const APD=275/(dim||1),CX=150,CY=150,INNER=30,TW=Math.min(24,(115-INNER)/(habits.length||1));
-  const perf=new Set();
-  for(let d=0;d<dim;d++)if(habits.length>0&&habits.every((_,h)=>data[`${h}-${d}`]==='done'))perf.add(d);
-  const stats=habits.map((_,h)=>{let n=0;for(let d=0;d<dim;d++)if(data[`${h}-${d}`]==='done')n++;return Math.round(n/dim*100);});
+  var habits=getH(m),data=getD(m),dim=daysIn(m),now=isCM(m),td=todD()-1;
+  var APD=275/(dim||1),CX=150,CY=150,INNER=30,TW=Math.min(24,(115-INNER)/(habits.length||1));
+  var perf={};
+  for(var d=0;d<dim;d++){
+    var allDone=habits.length>0;
+    for(var h=0;h<habits.length;h++){if(data[h+'-'+d]!=='done'){allDone=false;break;}}
+    if(allDone)perf[d]=true;
+  }
+  var stats=[];
+  for(var h=0;h<habits.length;h++){var n=0;for(var d=0;d<dim;d++)if(data[h+'-'+d]==='done')n++;stats.push(Math.round(n/dim*100));}
 
-  // Úhel aktuálního focusu — pro rotaci celého grafu
-  const focusD = S.fd!==null ? S.fd : td;
-  const focusAngle = focusD*APD + APD/2; // úhel středu vybraného dne
-  const rotDeg = S.fd!==null ? -focusAngle : 0; // rotujeme jen v focus módu
+  // Arc path builder
+  function arcPath(rI,rO,sA,eA){
+    var sR=(sA-90)*Math.PI/180,eR=(eA-90)*Math.PI/180,k=(4/3)*Math.tan((eR-sR)/4);
+    var p0x=CX+rO*Math.cos(sR),p0y=CY+rO*Math.sin(sR);
+    var p1x=p0x-rO*k*Math.sin(sR),p1y=p0y+rO*k*Math.cos(sR);
+    var p2x=CX+rO*Math.cos(eR)+rO*k*Math.sin(eR),p2y=CY+rO*Math.sin(eR)-rO*k*Math.cos(eR);
+    var p3x=CX+rO*Math.cos(eR),p3y=CY+rO*Math.sin(eR);
+    var q0x=CX+rI*Math.cos(eR),q0y=CY+rI*Math.sin(eR);
+    var q1x=q0x+rI*k*Math.sin(eR),q1y=q0y-rI*k*Math.cos(eR);
+    var q2x=CX+rI*Math.cos(sR)-rI*k*Math.sin(sR),q2y=CY+rI*Math.sin(sR)+rI*k*Math.cos(sR);
+    var q3x=CX+rI*Math.cos(sR),q3y=CY+rI*Math.sin(sR);
+    function f(v){return v.toFixed(2);}
+    return 'M'+f(p0x)+','+f(p0y)+' C'+f(p1x)+','+f(p1y)+' '+f(p2x)+','+f(p2y)+' '+f(p3x)+','+f(p3y)+' L'+f(q0x)+','+f(q0y)+' C'+f(q1x)+','+f(q1y)+' '+f(q2x)+','+f(q2y)+' '+f(q3x)+','+f(q3y)+' Z';
+  }
+  function pol(r,deg){var rad=(deg-90)*Math.PI/180;return{x:CX+r*Math.cos(rad),y:CY+r*Math.sin(rad)};}
 
-  const pol=(r,deg)=>{const rad=(deg-90)*Math.PI/180;return{x:CX+r*Math.cos(rad),y:CY+r*Math.sin(rad)};};
-  const arc=(rI,rO,sA,eA)=>{
-    const sR=(sA-90)*Math.PI/180,eR=(eA-90)*Math.PI/180,k=(4/3)*Math.tan((eR-sR)/4);
-    const p0={x:CX+rO*Math.cos(sR),y:CY+rO*Math.sin(sR)};const p1={x:p0.x-rO*k*Math.sin(sR),y:p0.y+rO*k*Math.cos(sR)};
-    const p2={x:CX+rO*Math.cos(eR)+rO*k*Math.sin(eR),y:CY+rO*Math.sin(eR)-rO*k*Math.cos(eR)};const p3={x:CX+rO*Math.cos(eR),y:CY+rO*Math.sin(eR)};
-    const q0={x:CX+rI*Math.cos(eR),y:CY+rI*Math.sin(eR)};const q1={x:q0.x+rI*k*Math.sin(eR),y:q0.y-rI*k*Math.cos(eR)};
-    const q2={x:CX+rI*Math.cos(sR)-rI*k*Math.sin(sR),y:CY+rI*Math.sin(sR)+rI*k*Math.cos(sR)};const q3={x:CX+rI*Math.cos(sR),y:CY+rI*Math.sin(sR)};
-    const f=v=>v.toFixed(2);
-    return`M${f(p0.x)},${f(p0.y)} C${f(p1.x)},${f(p1.y)} ${f(p2.x)},${f(p2.y)} ${f(p3.x)},${f(p3.y)} L${f(q0.x)},${f(q0.y)} C${f(q1.x)},${f(q1.y)} ${f(q2.x)},${f(q2.y)} ${f(q3.x)},${f(q3.y)} Z`;
-  };
+  // Focus rotation
+  var focusD=S.fd!==null?S.fd:td;
+  var focusAngle=focusD*APD+APD/2;
+  var rotDeg=S.fd!==null?-focusAngle:0;
 
-  // Builduji paths pro rotovatelnou skupinu
-  let ringPaths='';
-  perf.forEach(d=>{
-    const dim2=S.fd!==null&&d!==S.fd;
-    ringPaths+=`<path d="${arc(INNER,INNER+habits.length*TW,d*APD,(d+1)*APD)}" fill="#CCFF0018" stroke="#CCFF00" stroke-width=".7" style="filter:drop-shadow(0 0 3px #CCFF00);opacity:${dim2?.15:1}" pointer-events="none"/>`;
-  });
-  habits.forEach((_,h)=>{
-    const rI=INNER+(habits.length-1-h)*TW,rO=rI+TW-.5;
-    for(let d=0;d<dim;d++){
-      const s=data[`${h}-${d}`],isT=now&&d===td,dim2=S.fd!==null&&d!==S.fd;
-      ringPaths+=`<path d="${arc(rI,rO,d*APD,(d+1)*APD-.3)}" fill="${s==='done'?'#CCFF00':s==='fail'?'rgba(51,153,255,.35)':'transparent'}" stroke="${isT&&s!=='done'?'#CCFF0088':'#1e1e1e'}" stroke-width="${isT&&s!=='done'?1.2:.3}" opacity="${dim2?.12:1}" data-h="${h}" data-d="${d}" class="rs" style="cursor:pointer"/>`;
+  var ringPaths='';
+  for(var d=0;d<dim;d++){
+    if(perf[d]){
+      var dim2=S.fd!==null&&d!==S.fd;
+      ringPaths+='<path d="'+arcPath(INNER,INNER+habits.length*TW,d*APD,(d+1)*APD)+'" fill="#CCFF0018" stroke="#CCFF00" stroke-width=".7" style="filter:drop-shadow(0 0 3px #CCFF00);opacity:'+(dim2?.15:1)+'" pointer-events="none"/>';
     }
-  });
-  // Čísla dnů
-  for(let d=0;d<dim;d++){
-    const pos=pol(INNER+habits.length*TW+9,d*APD+APD/2),isT=now&&d===td,isP=perf.has(d),isFd=S.fd===d,dim2=S.fd!==null&&d!==S.fd;
-    ringPaths+=`<text x="${pos.x.toFixed(1)}" y="${pos.y.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" font-size="${isFd||isT?9:6}" font-weight="${isP||isT||isFd?700:400}" fill="${isFd?'#fff':isP||isT?'#CCFF00':'#383838'}" opacity="${dim2?.2:1}" data-day="${d}" class="dl" style="cursor:pointer;${isT?'filter:drop-shadow(0 0 3px #CCFF00)':''}">${d+1}</text>`;
+  }
+  for(var h=0;h<habits.length;h++){
+    var rI=INNER+(habits.length-1-h)*TW,rO=rI+TW-.5;
+    for(var d=0;d<dim;d++){
+      var s=data[h+'-'+d]||null;
+      var isT=now&&d===td,dim2=S.fd!==null&&d!==S.fd;
+      var fill=s==='done'?'#CCFF00':s==='fail'?'rgba(51,153,255,.35)':'transparent';
+      var strokeC=isT&&s!=='done'?'#CCFF0088':'#1e1e1e';
+      var strokeW=isT&&s!=='done'?1.2:.3;
+      ringPaths+='<path d="'+arcPath(rI,rO,d*APD,(d+1)*APD-.3)+'" fill="'+fill+'" stroke="'+strokeC+'" stroke-width="'+strokeW+'" opacity="'+(dim2?.12:1)+'" data-h="'+h+'" data-d="'+d+'" class="rs" style="cursor:pointer"/>';
+    }
+  }
+  for(var d=0;d<dim;d++){
+    var pos=pol(INNER+habits.length*TW+9,d*APD+APD/2);
+    var isT=now&&d===td,isP=perf[d],isFd=S.fd===d,dim2=S.fd!==null&&d!==S.fd;
+    var fs=isFd||isT?9:6,fw=isP||isT||isFd?700:400;
+    var fill=isFd?'#fff':(isP||isT?'#CCFF00':'#383838');
+    var op=dim2?.2:1;
+    ringPaths+='<text x="'+pos.x.toFixed(1)+'" y="'+pos.y.toFixed(1)+'" text-anchor="middle" dominant-baseline="middle" font-size="'+fs+'" font-weight="'+fw+'" fill="'+fill+'" opacity="'+op+'" data-day="'+d+'" class="dl" style="cursor:pointer'+(isT?';filter:drop-shadow(0 0 3px #CCFF00)':'')+'">'+(d+1)+'</text>';
   }
 
-  // Názvy návyků vlevo — absolutně pozicované vedle prstenců
-  const habitLabels = habits.map((h,i)=>{
-    const ringIdx = habits.length-1-i;
-    const rMid = INNER + ringIdx*TW + TW/2;
-    const topPct = ((CY - rMid)/300*100).toFixed(1);
-    const s = stats[i];
-    return `<div style="position:absolute;left:0;top:${topPct}%;transform:translateY(-50%);display:flex;align-items:center;gap:4px;pointer-events:none;">
-      <span style="color:var(--muted);font-size:7px;width:10px;text-align:right;">${i+1}.</span>
-      <span style="color:var(--acc);font-size:7px;width:24px;">[${s}%]</span>
-      <input class="fi hn" data-i="${i}" value="${h}" placeholder="Návyk…" maxlength="20" style="font-size:9px;font-weight:700;color:var(--text);width:90px;pointer-events:auto;">
-    </div>`;
-  }).join('');
+  // Habit labels left of ring
+  var habitLabels='';
+  for(var i=0;i<habits.length;i++){
+    var ringIdx=habits.length-1-i;
+    var rMid=INNER+ringIdx*TW+TW/2;
+    var topPct=((CY-rMid)/300*100).toFixed(1);
+    habitLabels+='<div style="position:absolute;left:0;top:'+topPct+'%;transform:translateY(-50%);display:flex;align-items:center;gap:4px;pointer-events:none;">'
+      +'<span style="color:var(--muted);font-size:7px;width:10px;text-align:right;">'+(i+1)+'.</span>'
+      +'<span style="color:var(--acc);font-size:7px;width:24px;">['+stats[i]+'%]</span>'
+      +'<input class="fi hn" data-i="'+i+'" value="'+habits[i]+'" placeholder="Návyk…" maxlength="20" style="font-size:9px;font-weight:700;color:var(--text);width:90px;pointer-events:auto;">'
+      +'</div>';
+  }
 
-  // Focus panel — checkboxy pro vybraný den
-  let fp='';
+  // Focus panel
+  var fp='';
   if(S.fd!==null){
-    const prevD=S.fd>0?S.fd-1:null, nextD=S.fd<dim-1?S.fd+1:null;
-    fp=`<div class="card">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-        <button id="prev-day" style="background:var(--bg3);border:1px solid var(--border2);border-radius:5px;width:28px;height:28px;cursor:pointer;color:${prevD!==null?'var(--text)':'var(--muted)'};font-size:14px;display:flex;align-items:center;justify-content:center;" ${prevD===null?'disabled':''}>‹</button>
-        <div class="card-title" style="margin:0;font-size:10px;">${S.fd+1}. ${MONTHS[m]}</div>
-        <button id="next-day" style="background:var(--bg3);border:1px solid var(--border2);border-radius:5px;width:28px;height:28px;cursor:pointer;color:${nextD!==null?'var(--text)':'var(--muted)'};font-size:14px;display:flex;align-items:center;justify-content:center;" ${nextD===null?'disabled':''}>›</button>
-      </div>
-      ${habits.map((h,hi)=>{const s=data[`${hi}-${S.fd}`];return`<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 9px;background:var(--bg3);border-radius:5px;cursor:pointer;margin-bottom:3px;" data-h="${hi}" data-d="${S.fd}" class="ft"><span style="color:${s==='done'?'var(--acc)':'#aaa'};font-size:12px;font-weight:${s==='done'?700:400}">${h||`Návyk ${hi+1}`}</span><div style="width:20px;height:20px;border-radius:3px;border:1px solid ${s==='done'?'var(--acc)':s==='fail'?'var(--acc2)':'#333'};background:${s==='done'?'var(--acc)':'transparent'};display:flex;align-items:center;justify-content:center;">${chkSvg(12,s)}</div></div>`;}).join('')}
-    </div>`;
+    var prevD=S.fd>0?S.fd-1:null,nextD=S.fd<dim-1?S.fd+1:null;
+    fp='<div class="card">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">'
+      +'<button id="prev-day" style="background:var(--bg3);border:1px solid var(--border2);border-radius:5px;width:28px;height:28px;cursor:pointer;color:'+(prevD!==null?'var(--text)':'var(--muted)')+';font-size:16px;display:flex;align-items:center;justify-content:center;" '+(prevD===null?'disabled':'')+'>‹</button>'
+      +'<div class="card-title" style="margin:0;font-size:10px;">'+(S.fd+1)+'. '+MONTHS[m]+'</div>'
+      +'<button id="next-day" style="background:var(--bg3);border:1px solid var(--border2);border-radius:5px;width:28px;height:28px;cursor:pointer;color:'+(nextD!==null?'var(--text)':'var(--muted)')+';font-size:16px;display:flex;align-items:center;justify-content:center;" '+(nextD===null?'disabled':'')+'>›</button>'
+      +'</div>';
+    for(var hi=0;hi<habits.length;hi++){
+      var s=data[hi+'-'+S.fd]||null;
+      var bc=s==='done'?'var(--acc)':s==='fail'?'var(--acc2)':'#333';
+      var bg=s==='done'?'var(--acc)':'transparent';
+      fp+='<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 9px;background:var(--bg3);border-radius:5px;cursor:pointer;margin-bottom:3px;" data-h="'+hi+'" data-d="'+S.fd+'" class="ft">'
+        +'<span style="color:'+(s==='done'?'var(--acc)':'#aaa')+';font-size:12px;font-weight:'+(s==='done'?700:400)+'">'+(habits[hi]||'Návyk '+(hi+1))+'</span>'
+        +'<div style="width:20px;height:20px;border-radius:3px;border:1px solid '+bc+';background:'+bg+';display:flex;align-items:center;justify-content:center;">'+chkSvg(12,s)+'</div>'
+        +'</div>';
+    }
+    fp+='</div>';
   }
 
-  const prevH=S.month>0?getH(S.month-1):[];const showCp=S.month>0&&prevH.length>0&&JSON.stringify(habits)!==JSON.stringify(prevH);
+  var prevH=S.month>0?getH(S.month-1):[];
+  var showCp=S.month>0&&prevH.length>0&&JSON.stringify(habits)!==JSON.stringify(prevH);
+  var centerLabel=S.fd!==null?'den '+(S.fd+1):(now?'den '+(td+1):'tap');
+  var centerSub=S.fd!==null?'zavřít':'den';
 
-  // Střed — velká klikací plocha + zobrazení stavu
-  const centerLabel = S.fd!==null ? `den ${S.fd+1}` : (now?`den ${td+1}`:'tap');
-  const centerSub = S.fd!==null ? 'zavřít' : 'den';
-
-  return`<div style="display:flex;flex-direction:column;align-items:center;gap:10px;">
-    <div style="position:relative;width:300px;height:300px;">
-      <svg viewBox="0 0 300 300" width="300" height="300" id="habit-svg">
-        <circle cx="${CX}" cy="${CY}" r="${INNER-3}" fill="#111" stroke="#1a1a1a" stroke-width="1"/>
-        <g id="ring-group" style="transform:rotate(${rotDeg}deg);transform-origin:${CX}px ${CY}px;transition:transform 0.5s cubic-bezier(0.4,0,0.2,1);">
-          ${ringPaths}
-        </g>
-        <!-- střed — nerotatuje, vždy nahoře -->
-        <circle cx="${CX}" cy="${CY}" r="${INNER-3}" fill="transparent" id="center-touch" style="cursor:pointer"/>
-        <text x="${CX}" y="${CY-4}" text-anchor="middle" font-size="8" fill="${S.fd!==null?'var(--acc)':'#555'}" font-weight="700" pointer-events="none">${centerLabel}</text>
-        <text x="${CX}" y="${CY+6}" text-anchor="middle" font-size="6" fill="#333" pointer-events="none">${centerSub}</text>
-      </svg>
-      ${habitLabels}
-    </div>
-    ${fp}
-    <div style="display:flex;align-items:center;gap:10px;margin-top:2px;">
-      <button id="rmh" style="width:28px;height:28px;border-radius:50%;background:var(--bg3);border:none;color:var(--text);cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;" ${habits.length<=1?'disabled':''}>−</button>
-      <span style="font-size:9px;color:var(--muted);width:58px;text-align:center;">${habits.length} návyků</span>
-      <button id="adh" style="width:28px;height:28px;border-radius:50%;background:var(--acc);border:none;color:#000;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;" ${habits.length>=14?'disabled':''}>+</button>
-    </div>
-    ${showCp?`<button id="cph" style="background:transparent;border:1px dashed var(--border2);border-radius:5px;padding:5px 12px;color:var(--muted);font-size:9px;cursor:pointer;">⎘ Načíst z ${MONTHS[S.month-1]} (${prevH.length} návyků)</button>`:''}
-  </div>`;
+  return '<div style="display:flex;flex-direction:column;align-items:center;gap:10px;">'
+    +'<div style="position:relative;width:300px;height:300px;">'
+    +'<svg viewBox="0 0 300 300" width="300" height="300">'
+    +'<circle cx="'+CX+'" cy="'+CY+'" r="'+(INNER-3)+'" fill="#111" stroke="#1a1a1a" stroke-width="1"/>'
+    +'<g style="transform:rotate('+rotDeg+'deg);transform-origin:'+CX+'px '+CY+'px;transition:transform 0.5s cubic-bezier(0.4,0,0.2,1);">'+ringPaths+'</g>'
+    +'<circle cx="'+CX+'" cy="'+CY+'" r="'+(INNER-3)+'" fill="transparent" id="center-touch" style="cursor:pointer"/>'
+    +'<text x="'+CX+'" y="'+(CY-4)+'" text-anchor="middle" font-size="8" fill="'+(S.fd!==null?'var(--acc)':'#555')+'" font-weight="700" pointer-events="none">'+centerLabel+'</text>'
+    +'<text x="'+CX+'" y="'+(CY+6)+'" text-anchor="middle" font-size="6" fill="#333" pointer-events="none">'+centerSub+'</text>'
+    +'</svg>'
+    +habitLabels
+    +'</div>'
+    +fp
+    +'<div style="display:flex;align-items:center;gap:10px;margin-top:2px;">'
+    +'<button id="rmh" style="width:28px;height:28px;border-radius:50%;background:var(--bg3);border:none;color:var(--text);cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;" '+(habits.length<=1?'disabled':'')+'>−</button>'
+    +'<span style="font-size:9px;color:var(--muted);width:58px;text-align:center;">'+habits.length+' návyků</span>'
+    +'<button id="adh" style="width:28px;height:28px;border-radius:50%;background:var(--acc);border:none;color:#000;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;" '+(habits.length>=14?'disabled':'')+'>+</button>'
+    +'</div>'
+    +(showCp?'<button id="cph" style="background:transparent;border:1px dashed var(--border2);border-radius:5px;padding:5px 12px;color:var(--muted);font-size:9px;cursor:pointer;">⎘ Načíst z '+MONTHS[S.month-1]+' ('+prevH.length+' návyků)</button>':'')
+    +'</div>';
 }
 function bHabits(m){
-  const habits=getH(m),data=getD(m),dim=daysIn(m);
-  // Klik na segment prstence — toggle + focus na den
-  document.querySelectorAll('.rs').forEach(el=>el.addEventListener('click',()=>{
-    const h=+el.dataset.h,d=+el.dataset.d,k=`${h}-${d}`,cur=data[k];
-    data[k]=!cur?'done':cur==='done'?'fail':null;
-    if(!data[k])delete data[k];
-    setD(m,data);S.fd=d;render();
-  }));
-  // Klik na číslo dne — focus/unfocus
-  document.querySelectorAll('.dl').forEach(el=>el.addEventListener('click',()=>{
-    const d=+el.dataset.day;S.fd=S.fd===d?null:d;render();
-  }));
-  // Checkboxy ve focus panelu
-  document.querySelectorAll('.ft').forEach(el=>el.addEventListener('click',()=>{
-    const h=+el.dataset.h,d=+el.dataset.d,k=`${h}-${d}`,cur=data[k];
-    data[k]=!cur?'done':cur==='done'?'fail':null;
-    if(!data[k])delete data[k];setD(m,data);render();
-  }));
-  // Editace názvů
-  document.querySelectorAll('.hn').forEach(el=>el.addEventListener('input',()=>{habits[+el.dataset.i]=el.value;setH(m,habits);}));
-  // Přidat/odebrat
-  document.getElementById('adh')?.addEventListener('click',()=>{if(habits.length<14){habits.push('');setH(m,habits);render();}});
-  document.getElementById('rmh')?.addEventListener('click',()=>{if(habits.length>1){habits.pop();setH(m,habits);render();}});
-  document.getElementById('cph')?.addEventListener('click',()=>{const p=getH(m-1);if(confirm(`Načíst ${p.length} návyků z ${MONTHS[m-1]}?`)){setH(m,p);render();}});
-  // Střed — otevřít/zavřít dnešní den
-  document.getElementById('center-touch')?.addEventListener('click',()=>{
-    S.fd=S.fd!==null?null:(isCM(m)?todD()-1:0);render();
+  var habits=getH(m),data=getD(m),dim=daysIn(m);
+  var els=document.querySelectorAll('.rs');
+  for(var i=0;i<els.length;i++){
+    els[i].addEventListener('click',function(){
+      var h=+this.dataset.h,d=+this.dataset.d,k=h+'-'+d,cur=data[k];
+      data[k]=!cur?'done':cur==='done'?'fail':null;
+      if(!data[k])delete data[k];
+      setD(m,data);S.fd=d;render();
+    });
+  }
+  var dls=document.querySelectorAll('.dl');
+  for(var i=0;i<dls.length;i++){
+    dls[i].addEventListener('click',function(){
+      var d=+this.dataset.day;S.fd=S.fd===d?null:d;render();
+    });
+  }
+  var fts=document.querySelectorAll('.ft');
+  for(var i=0;i<fts.length;i++){
+    fts[i].addEventListener('click',function(){
+      var h=+this.dataset.h,d=+this.dataset.d,k=h+'-'+d,cur=data[k];
+      data[k]=!cur?'done':cur==='done'?'fail':null;
+      if(!data[k])delete data[k];
+      setD(m,data);render();
+    });
+  }
+  var hns=document.querySelectorAll('.hn');
+  for(var i=0;i<hns.length;i++){
+    hns[i].addEventListener('input',function(){habits[+this.dataset.i]=this.value;setH(m,habits);});
+  }
+  var adh=document.getElementById('adh');
+  if(adh)adh.addEventListener('click',function(){if(habits.length<14){habits.push('');setH(m,habits);render();}});
+  var rmh=document.getElementById('rmh');
+  if(rmh)rmh.addEventListener('click',function(){if(habits.length>1){habits.pop();setH(m,habits);render();}});
+  var cph=document.getElementById('cph');
+  if(cph)cph.addEventListener('click',function(){
+    var p=getH(m-1);
+    if(confirm('Načíst '+p.length+' návyků z '+MONTHS[m-1]+'?')){setH(m,p);render();}
   });
-  // Šipky pro přepínání dnů
-  document.getElementById('prev-day')?.addEventListener('click',()=>{if(S.fd>0){S.fd--;render();}});
-  document.getElementById('next-day')?.addEventListener('click',()=>{if(S.fd<dim-1){S.fd++;render();}});
+  var ct=document.getElementById('center-touch');
+  if(ct)ct.addEventListener('click',function(){S.fd=S.fd!==null?null:(isCM(m)?todD()-1:0);render();});
+  var pd=document.getElementById('prev-day');
+  if(pd)pd.addEventListener('click',function(){if(S.fd>0){S.fd--;render();}});
+  var nd=document.getElementById('next-day');
+  if(nd)nd.addEventListener('click',function(){if(S.fd<dim-1){S.fd++;render();}});
 }
 
 // ── NUTRITION ──
 function rNutr(m){
-  const data=getN(m),dim=daysIn(m),ws=wks(m),now=isCM(m),td=todD();
-  let sI=0,cI=0,sO=0,cO=0;
-  for(let d=0;d<dim;d++){const vI=parseInt(data[d]?.kcalIn||''),vO=parseInt(data[d]?.kcalOut||'');if(!isNaN(vI)){sI+=vI;cI++;}if(!isNaN(vO)){sO+=vO;cO++;}}
-  const aI=cI?Math.round(sI/cI):0,aO=cO?Math.round(sO/cO):0,diff=sI-sO;
-  let maxK=2500,lf=-1;for(let d=0;d<dim;d++)if(data[d]?.kcalIn||data[d]?.kcalOut)lf=d;
-  const pI=[],pO=[];for(let d=0;d<=lf;d++){const vI=parseInt(data[d]?.kcalIn||''),vO=parseInt(data[d]?.kcalOut||'');if(!isNaN(vI)){pI.push({x:d,y:vI});maxK=Math.max(maxK,vI);}if(!isNaN(vO)){pO.push({x:d,y:vO});maxK=Math.max(maxK,vO);}}
-  maxK*=1.1;const W=300,H=65,sx=W/(dim-1||1);
-  const mp=(pts,fy)=>pts.length?pts.map((p,i)=>`${i===0?'M':'L'} ${(p.x*sx).toFixed(1)} ${fy(p.y).toFixed(1)}`).join(' '):'';
-  const pathI=mp(pI,y=>H-(y/maxK)*H),pathO=mp(pO,y=>H-(y/maxK)*H);
-  const calRows=ws.map((w,wI)=>{
-    let tI=0,tO=0;w.forEach(d=>{if(!d)return;const vI=parseInt(data[d-1]?.kcalIn||'0'),vO=parseInt(data[d-1]?.kcalOut||'0');if(vI>0||vO>0){tI+=vI;tO+=vO;}});
-    const wDiff=tI-tO;
-    // Weight/fat/muscle delta from body metrics
-    const metrics=getM(m),defs=getDefs();
-    const curW=parseFloat(metrics[wI]?.[defs[0]?.id]),prevW=parseFloat(metrics[wI-1]?.[defs[0]?.id]);
-    const wDelta=(!isNaN(curW)&&!isNaN(prevW))?(curW-prevW).toFixed(1):null;
-    const fatId=defs.find(d=>d.id==='fat')?.id,musId=defs.find(d=>d.id==='muscle')?.id;
-    const curFat=parseFloat(metrics[wI]?.[fatId]),prevFat=parseFloat(metrics[wI-1]?.[fatId]);
-    const fatDelta=(!isNaN(curFat)&&!isNaN(prevFat))?(curFat-prevFat).toFixed(1):null;
-    const curMus=parseFloat(metrics[wI]?.[musId]),prevMus=parseFloat(metrics[wI-1]?.[musId]);
-    const musDelta=(!isNaN(curMus)&&!isNaN(prevMus))?(curMus-prevMus).toFixed(1):null;
-    return w.map(d=>{if(!d)return`<div class="ccell emp"></div>`;const iV=data[d-1]?.kcalIn||'',oV=data[d-1]?.kcalOut||'',df=(parseInt(iV)||0)-(parseInt(oV)||0),has=iV||oV,isT=now&&d===td;return`<div class="ccell" style="${isT?'background:var(--bg3);':''}"><span class="daynum ${isT?'tod':''}">${d}</span><input class="ni ni-in acc" data-d="${d-1}" placeholder="in" value="${iV}" type="number"><input class="ni ni-out acc2" data-d="${d-1}" placeholder="out" value="${oV}" type="number">${has?`<div style="font-size:7px;color:${df>0?'var(--red)':'var(--acc)'};text-align:right;margin-top:auto;">${df>0?'+':''}${df}</div>`:''}</div>`;}).join('')+`<div class="ccell" style="background:#0f0f0f;justify-content:flex-start;gap:2px;padding:3px;">`+`<div style="font-size:6px;color:var(--muted);">Σ kcal</div><div style="font-size:9px;font-weight:700;color:${wDiff>0?'var(--red)':'var(--acc)'};">${wDiff>0?'+':''}${wDiff||'—'}</div>`+(wDelta!==null?`<div style="font-size:6px;color:var(--muted);">Δ váha</div><div style="font-size:8px;font-weight:700;color:${parseFloat(wDelta)>0?'var(--red)':'var(--acc)'};">${parseFloat(wDelta)>0?'+':''}${wDelta}kg</div>`:'')+( fatDelta!==null?`<div style="font-size:6px;color:var(--muted);">Δ tuk</div><div style="font-size:8px;font-weight:700;color:${parseFloat(fatDelta)>0?'var(--red)':'var(--acc)'};">${parseFloat(fatDelta)>0?'+':''}${fatDelta}%</div>`:'')+( musDelta!==null?`<div style="font-size:6px;color:var(--muted);">Δ sval</div><div style="font-size:8px;font-weight:700;color:${parseFloat(musDelta)>0?'var(--acc)':'var(--red)'};">${parseFloat(musDelta)>0?'+':''}${musDelta}</div>`:'')+`</div>`;
-  }).join('');
-  return`<div class="sgrid"><div class="sbox"><div class="slabel">Ø Příjem</div><div class="sval acc">${aI}</div><div class="sunit">kcal/den</div></div><div class="sbox"><div class="slabel">Ø Výdej</div><div class="sval acc2">${aO}</div><div class="sunit">kcal/den</div></div></div>
-  <div class="sbox" style="margin-bottom:10px;"><div class="slabel">Celkový deficit</div><div class="sval ${diff<0?'acc':'red'}">${diff>0?'+':''}${diff} <span class="sunit">kcal</span></div></div>
-  ${pathI||pathO?`<div class="card"><div style="display:flex;gap:10px;margin-bottom:6px;"><div style="display:flex;align-items:center;gap:3px;font-size:8px;color:var(--muted);"><div style="width:10px;height:2px;background:var(--acc);"></div>Příjem</div><div style="display:flex;align-items:center;gap:3px;font-size:8px;color:var(--muted);"><div style="width:10px;height:2px;background:var(--acc2);"></div>Výdej</div></div><svg viewBox="0 0 300 65" style="width:100%;height:55px;" preserveAspectRatio="none">${pathI?`<path d="${pathI}" fill="none" stroke="var(--acc)" stroke-width="1.5" opacity=".8"/>`:''}${pathO?`<path d="${pathO}" fill="none" stroke="var(--acc2)" stroke-width="1.5" opacity=".8"/>`:''}  </svg></div>`:''}
-  <div class="card" style="padding:0;overflow:hidden;"><div class="cgrid-8 chdr8">${DAYS.map(d=>`<div>${d}</div>`).join('')}<div class="wkcol" style="padding:4px 1px;text-align:center;font-size:7px;font-weight:700;">Týden</div></div><div class="cgrid-8" style="border-left:1px solid var(--border);">${calRows}</div></div>`;
+  var data=getN(m),dim=daysIn(m),ws=getWks(m),now=isCM(m),td=todD();
+  var sI=0,cI=0,sO=0,cO=0;
+  for(var d=0;d<dim;d++){
+    var vI=parseInt(data[d]?data[d].kcalIn:''),vO=parseInt(data[d]?data[d].kcalOut:'');
+    if(!isNaN(vI)){sI+=vI;cI++;}if(!isNaN(vO)){sO+=vO;cO++;}
+  }
+  var aI=cI?Math.round(sI/cI):0,aO=cO?Math.round(sO/cO):0,diff=sI-sO;
+  var maxK=2500,lf=-1;
+  for(var d=0;d<dim;d++)if(data[d]&&(data[d].kcalIn||data[d].kcalOut))lf=d;
+  var pI=[],pO=[];
+  for(var d=0;d<=lf;d++){
+    var vI=parseInt(data[d]?data[d].kcalIn:''),vO=parseInt(data[d]?data[d].kcalOut:'');
+    if(!isNaN(vI)){pI.push({x:d,y:vI});if(vI>maxK)maxK=vI;}
+    if(!isNaN(vO)){pO.push({x:d,y:vO});if(vO>maxK)maxK=vO;}
+  }
+  maxK*=1.1;var W=300,H=65,sx=W/(dim-1||1);
+  function mp(pts,fy){if(!pts.length)return '';var s='';for(var i=0;i<pts.length;i++)s+=(i===0?'M':'L')+' '+(pts[i].x*sx).toFixed(1)+' '+fy(pts[i].y).toFixed(1)+' ';return s;}
+  var pathI=mp(pI,function(y){return H-(y/maxK)*H;}),pathO=mp(pO,function(y){return H-(y/maxK)*H;});
+
+  var calRows='';
+  for(var wI=0;wI<ws.length;wI++){
+    var w=ws[wI],tI=0,tO=0;
+    for(var di=0;di<w.length;di++){
+      var d=w[di];if(!d)continue;
+      var vI=parseInt(data[d-1]?data[d-1].kcalIn:'0')||0;
+      var vO=parseInt(data[d-1]?data[d-1].kcalOut:'0')||0;
+      if(vI>0||vO>0){tI+=vI;tO+=vO;}
+    }
+    var wDiff=tI-tO;
+    for(var di=0;di<w.length;di++){
+      var d=w[di];
+      if(!d){calRows+='<div class="ccell emp"></div>';continue;}
+      var iV=data[d-1]?data[d-1].kcalIn||'':'',oV=data[d-1]?data[d-1].kcalOut||'':'';
+      var df=(parseInt(iV)||0)-(parseInt(oV)||0),has=iV||oV,isT=now&&d===td;
+      calRows+='<div class="ccell" style="'+(isT?'background:var(--bg3);':'')+'">'
+        +'<span class="daynum '+(isT?'tod':'')+'">'+d+'</span>'
+        +'<input class="ni ni-in acc" data-d="'+(d-1)+'" placeholder="in" value="'+iV+'" type="number">'
+        +'<input class="ni ni-out acc2" data-d="'+(d-1)+'" placeholder="out" value="'+oV+'" type="number">'
+        +(has?'<div style="font-size:7px;color:'+(df>0?'var(--red)':'var(--acc)')+';text-align:right;margin-top:auto;">'+(df>0?'+':'')+df+'</div>':'')
+        +'</div>';
+    }
+    calRows+='<div class="ccell" style="background:#0f0f0f;justify-content:center;gap:2px;">'
+      +'<div style="font-size:6px;color:var(--muted);">Σ kcal</div>'
+      +'<div style="font-size:9px;font-weight:700;color:'+(wDiff>0?'var(--red)':'var(--acc)')+';">'+(wDiff>0?'+':'')+wDiff+'</div>'
+      +'</div>';
+  }
+
+  var html='<div class="sgrid">'
+    +'<div class="sbox"><div class="slabel">Ø Příjem</div><div class="sval acc">'+aI+'</div><div class="sunit">kcal/den</div></div>'
+    +'<div class="sbox"><div class="slabel">Ø Výdej</div><div class="sval acc2">'+aO+'</div><div class="sunit">kcal/den</div></div>'
+    +'</div>'
+    +'<div class="sbox" style="margin-bottom:10px;"><div class="slabel">Celkový deficit</div>'
+    +'<div class="sval '+(diff<0?'acc':'red')+'">'+(diff>0?'+':'')+diff+' <span class="sunit">kcal</span></div></div>';
+  if(pathI||pathO){
+    html+='<div class="card"><div style="display:flex;gap:10px;margin-bottom:6px;">'
+      +'<div style="display:flex;align-items:center;gap:3px;font-size:8px;color:var(--muted);"><div style="width:10px;height:2px;background:var(--acc);"></div>Příjem</div>'
+      +'<div style="display:flex;align-items:center;gap:3px;font-size:8px;color:var(--muted);"><div style="width:10px;height:2px;background:var(--acc2);"></div>Výdej</div>'
+      +'</div>'
+      +'<svg viewBox="0 0 300 65" style="width:100%;height:55px;" preserveAspectRatio="none">'
+      +(pathI?'<path d="'+pathI+'" fill="none" stroke="var(--acc)" stroke-width="1.5" opacity=".8"/>'  :'')
+      +(pathO?'<path d="'+pathO+'" fill="none" stroke="var(--acc2)" stroke-width="1.5" opacity=".8"/>':'')
+      +'</svg></div>';
+  }
+  html+='<div class="card" style="padding:0;overflow:hidden;">'
+    +'<div class="cgrid-8 chdr8">';
+  for(var i=0;i<DAYS.length;i++)html+='<div>'+DAYS[i]+'</div>';
+  html+='<div class="wkcol" style="padding:4px 1px;text-align:center;font-size:7px;font-weight:700;">Týden</div>'
+    +'</div>'
+    +'<div class="cgrid-8" style="border-left:1px solid var(--border);">'+calRows+'</div>'
+    +'</div>';
+  return html;
 }
-function bNutr(m){const data=getN(m);const rr=el=>{clearTimeout(el._t);el._t=setTimeout(()=>render(),900);};document.querySelectorAll('.ni-in').forEach(el=>el.addEventListener('input',()=>{const d=+el.dataset.d;data[d]={...(data[d]||{}),kcalIn:el.value};setN(m,data);rr(el);}));document.querySelectorAll('.ni-out').forEach(el=>el.addEventListener('input',()=>{const d=+el.dataset.d;data[d]={...(data[d]||{}),kcalOut:el.value};setN(m,data);rr(el);}));}
+function bNutr(m){
+  var data=getN(m);
+  function rr(el){clearTimeout(el._t);el._t=setTimeout(function(){render();},900);}
+  var ins=document.querySelectorAll('.ni-in');
+  for(var i=0;i<ins.length;i++){
+    ins[i].addEventListener('input',function(){
+      var d=+this.dataset.d;
+      if(!data[d])data[d]={};
+      data[d].kcalIn=this.value;setN(m,data);rr(this);
+    });
+  }
+  var outs=document.querySelectorAll('.ni-out');
+  for(var i=0;i<outs.length;i++){
+    outs[i].addEventListener('input',function(){
+      var d=+this.dataset.d;
+      if(!data[d])data[d]={};
+      data[d].kcalOut=this.value;setN(m,data);rr(this);
+    });
+  }
+}
 
 // ── BODY ──
 function rBody(m){
-  const metrics=getM(m),defs=getDefs(),ss2=suns(m);
-  const lat={};defs.forEach(d=>{for(let i=4;i>=0;i--){const v=parseFloat(metrics[i]?.[d.id]);if(!isNaN(v)){lat[d.id]=v;break;}}});
-  const ranges={weight:{min:60,max:120,norm:[70,95]},waist:{min:60,max:110,norm:[70,88]},muscle:{min:25,max:55,norm:[36,46]},fat:{min:4,max:32,norm:[10,18]}};
-  const bars=defs.map(d=>{const v=lat[d.id],r=ranges[d.id];if(v===undefined||!r)return'';const pct=Math.min(100,Math.max(0,(v-r.min)/(r.max-r.min)*100)),nL=(r.norm[0]-r.min)/(r.max-r.min)*100,nW=(r.norm[1]-r.norm[0])/(r.max-r.min)*100;return`<div class="bar-wrap"><div class="bar-lbl"><span style="color:${d.color};font-weight:700;">${d.label}</span><span style="color:var(--text);font-weight:700;">${v}</span></div><div class="bar-track"><div class="bar-norm" style="left:${nL}%;width:${nW}%;"></div><div class="bar-fill" style="width:${pct}%;background:${d.color};"></div></div></div>`;}).join('');
-  const H=75,W=300;
-  const lines=defs.map(d=>{const pts=[],vals=[];for(let i=0;i<5;i++){const v=parseFloat(metrics[i]?.[d.id]);if(!isNaN(v)){pts.push({x:i,y:v});vals.push(v);}}if(!vals.length)return'';const min=Math.min(...vals)*.96,max=Math.max(...vals)*1.04,rng=max-min||1,sx=W/4;const path=pts.map((p,i)=>`${i===0?'M':'L'} ${(p.x*sx).toFixed(1)} ${(H-((p.y-min)/rng)*H).toFixed(1)}`).join(' ');return`<path d="${path}" fill="none" stroke="${d.color}" stroke-width="2"/>${pts.map(p=>`<circle cx="${(p.x*sx).toFixed(1)}" cy="${(H-((p.y-min)/rng)*H).toFixed(1)}" r="3" fill="var(--bg)" stroke="${d.color}" stroke-width="1.5"/><text x="${(p.x*sx).toFixed(1)}" y="${(H-((p.y-min)/rng)*H-8).toFixed(1)}" text-anchor="middle" font-size="7" fill="${d.color}" font-weight="700">${p.y}</text>`).join('')}`;}).join('');
-  const tableRows=defs.map(d=>`<tr><td style="padding:5px 4px 5px 8px;"><div style="display:flex;align-items:center;gap:5px;"><div style="width:7px;height:7px;border-radius:50%;background:${d.color};flex-shrink:0;"></div><input class="mdef-lbl fi" data-id="${d.id}" value="${d.label}" style="font-size:8px;font-weight:700;width:78px;">${defs.length>1?`<button class="mdef-del" data-id="${d.id}" style="background:transparent;border:none;cursor:pointer;color:var(--muted);margin-left:auto;font-size:10px;">✕</button>`:''}</div></td>${[0,1,2,3,4].map(i=>`<td><input class="mval fi" data-id="${d.id}" data-i="${i}" type="number" placeholder="—" value="${metrics[i]?.[d.id]||''}" style="color:${d.color};font-size:9px;font-weight:700;text-align:center;"></td>`).join('')}</tr>`).join('');
-  return`${bars?`<div class="card"><div class="card-title">Aktuální hodnoty</div>${bars}</div>`:`<div class="card"><div style="color:var(--muted);font-size:11px;text-align:center;padding:8px;">Zatím žádná data — zadej první měření níže</div></div>`}
-  ${lines?`<div class="card"><div class="card-title">Vývoj v měsíci</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;">${defs.map(d=>`<div style="display:flex;align-items:center;gap:3px;font-size:8px;color:var(--muted);"><div style="width:7px;height:7px;border-radius:50%;background:${d.color};"></div>${d.label}</div>`).join('')}</div><svg viewBox="0 0 300 75" style="width:100%;height:70px;" preserveAspectRatio="none">${lines}</svg></div>`:''}
-  <div class="card" style="padding:0;overflow:hidden;"><div style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px;background:var(--bg3);border-bottom:1px solid var(--border);"><span style="font-size:8px;font-weight:700;color:var(--muted);text-transform:uppercase;">Nedělní měření</span><button id="admet" class="btn" ${defs.length>=6?'disabled':''}>+ Přidat</button></div><div style="overflow-x:auto;"><table class="mtbl" style="min-width:300px;"><thead><tr><th style="text-align:left;padding-left:8px;">Metrika</th>${ss2.slice(0,5).map(s=>`<th>${s.getDate()}.${s.getMonth()+1}.</th>`).join('')}</tr></thead><tbody>${tableRows}</tbody></table></div></div>`;
+  var metrics=getM(m),defs=getDefs(),ss2=getSuns(m);
+  var lat={};
+  for(var di=0;di<defs.length;di++){
+    for(var i=4;i>=0;i--){
+      var v=parseFloat(metrics[i]?metrics[i][defs[di].id]:NaN);
+      if(!isNaN(v)){lat[defs[di].id]=v;break;}
+    }
+  }
+  var ranges={weight:{min:60,max:120,norm:[70,95]},waist:{min:60,max:110,norm:[70,88]},muscle:{min:25,max:55,norm:[36,46]},fat:{min:4,max:32,norm:[10,18]}};
+  var bars='';
+  for(var di=0;di<defs.length;di++){
+    var def=defs[di],v=lat[def.id],r=ranges[def.id];
+    if(v===undefined||!r)continue;
+    var pct=Math.min(100,Math.max(0,(v-r.min)/(r.max-r.min)*100));
+    var nL=(r.norm[0]-r.min)/(r.max-r.min)*100,nW=(r.norm[1]-r.norm[0])/(r.max-r.min)*100;
+    bars+='<div class="bar-wrap"><div class="bar-lbl"><span style="color:'+def.color+';font-weight:700;">'+def.label+'</span><span style="color:var(--text);font-weight:700;">'+v+'</span></div>'
+      +'<div class="bar-track"><div class="bar-norm" style="left:'+nL+'%;width:'+nW+'%;"></div><div class="bar-fill" style="width:'+pct+'%;background:'+def.color+';"></div></div></div>';
+  }
+  var H=75,W=300,lines='';
+  for(var di=0;di<defs.length;di++){
+    var def=defs[di],pts=[],vals=[];
+    for(var i=0;i<5;i++){var v=parseFloat(metrics[i]?metrics[i][def.id]:NaN);if(!isNaN(v)){pts.push({x:i,y:v});vals.push(v);}}
+    if(!vals.length)continue;
+    var min=Math.min.apply(null,vals)*.96,max=Math.max.apply(null,vals)*1.04,rng=max-min||1,sx=W/4;
+    var path='';for(var i=0;i<pts.length;i++)path+=(i===0?'M':'L')+' '+(pts[i].x*sx).toFixed(1)+' '+(H-((pts[i].y-min)/rng)*H).toFixed(1)+' ';
+    lines+='<path d="'+path+'" fill="none" stroke="'+def.color+'" stroke-width="2"/>';
+    for(var i=0;i<pts.length;i++){
+      var cx=(pts[i].x*sx).toFixed(1),cy=(H-((pts[i].y-min)/rng)*H).toFixed(1);
+      lines+='<circle cx="'+cx+'" cy="'+cy+'" r="3" fill="var(--bg)" stroke="'+def.color+'" stroke-width="1.5"/>';
+      lines+='<text x="'+cx+'" y="'+(H-((pts[i].y-min)/rng)*H-8).toFixed(1)+'" text-anchor="middle" font-size="7" fill="'+def.color+'" font-weight="700">'+pts[i].y+'</text>';
+    }
+  }
+  var tableRows='';
+  for(var di=0;di<defs.length;di++){
+    var def=defs[di];
+    tableRows+='<tr><td style="padding:5px 4px 5px 8px;"><div style="display:flex;align-items:center;gap:5px;">'
+      +'<div style="width:7px;height:7px;border-radius:50%;background:'+def.color+';flex-shrink:0;"></div>'
+      +'<input class="mdef-lbl fi" data-id="'+def.id+'" value="'+def.label+'" style="font-size:8px;font-weight:700;width:78px;">'
+      +(defs.length>1?'<button class="mdef-del" data-id="'+def.id+'" style="background:transparent;border:none;cursor:pointer;color:var(--muted);margin-left:auto;font-size:10px;">✕</button>':'')
+      +'</div></td>';
+    for(var i=0;i<5;i++){
+      var val=metrics[i]?metrics[i][def.id]||'':'';
+      tableRows+='<td><input class="mval fi" data-id="'+def.id+'" data-i="'+i+'" type="number" placeholder="—" value="'+val+'" style="color:'+def.color+';font-size:9px;font-weight:700;text-align:center;"></td>';
+    }
+    tableRows+='</tr>';
+  }
+  var sunHdrs='';
+  for(var i=0;i<5;i++){
+    var s=ss2[i];sunHdrs+=s?'<th>'+s.getDate()+'.'+(s.getMonth()+1)+'.</th>':'<th>—</th>';
+  }
+  var html=(bars?'<div class="card"><div class="card-title">Aktuální hodnoty</div>'+bars+'</div>':'<div class="card"><div style="color:var(--muted);font-size:11px;text-align:center;padding:8px;">Zatím žádná data — zadej první měření níže</div></div>');
+  if(lines)html+='<div class="card"><div class="card-title">Vývoj v měsíci</div><svg viewBox="0 0 300 75" style="width:100%;height:70px;" preserveAspectRatio="none">'+lines+'</svg></div>';
+  html+='<div class="card" style="padding:0;overflow:hidden;">'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px;background:var(--bg3);border-bottom:1px solid var(--border);">'
+    +'<span style="font-size:8px;font-weight:700;color:var(--muted);text-transform:uppercase;">Nedělní měření</span>'
+    +'<button id="admet" class="btn" '+(defs.length>=6?'disabled':'')+'>+ Přidat</button>'
+    +'</div><div style="overflow-x:auto;"><table class="mtbl" style="min-width:300px;">'
+    +'<thead><tr><th style="text-align:left;padding-left:8px;">Metrika</th>'+sunHdrs+'</tr></thead>'
+    +'<tbody>'+tableRows+'</tbody></table></div></div>';
+  return html;
 }
-function bBody(m){const metrics=getM(m),defs=getDefs();document.querySelectorAll('.mval').forEach(el=>el.addEventListener('input',()=>{const id=el.dataset.id,i=+el.dataset.i;metrics[i]={...(metrics[i]||{}),[id]:el.value};setM(m,metrics);clearTimeout(el._t);el._t=setTimeout(()=>render(),1100);}));document.querySelectorAll('.mdef-lbl').forEach(el=>el.addEventListener('input',()=>{const idx=defs.findIndex(d=>d.id===el.dataset.id);if(idx>=0){defs[idx].label=el.value;setDefs(defs);}}));document.querySelectorAll('.mdef-del').forEach(el=>el.addEventListener('click',()=>{const idx=defs.findIndex(d=>d.id===el.dataset.id);if(idx>=0&&defs.length>1){defs.splice(idx,1);setDefs(defs);render();}}));document.getElementById('admet')?.addEventListener('click',()=>{if(defs.length<6){defs.push({id:`m_${Date.now()}`,label:'Nová',color:COLORS[defs.length%COLORS.length]});setDefs(defs);render();}});}
+function bBody(m){
+  var metrics=getM(m),defs=getDefs();
+  var mvals=document.querySelectorAll('.mval');
+  for(var i=0;i<mvals.length;i++){
+    mvals[i].addEventListener('input',function(){
+      var id=this.dataset.id,idx=+this.dataset.i;
+      if(!metrics[idx])metrics[idx]={};
+      metrics[idx][id]=this.value;setMet(m,metrics);
+      clearTimeout(this._t);this._t=setTimeout(function(){render();},1100);
+    });
+  }
+  var lbls=document.querySelectorAll('.mdef-lbl');
+  for(var i=0;i<lbls.length;i++){
+    lbls[i].addEventListener('input',function(){
+      var id=this.dataset.id;
+      for(var j=0;j<defs.length;j++)if(defs[j].id===id){defs[j].label=this.value;break;}
+      setDefs(defs);
+    });
+  }
+  var dels=document.querySelectorAll('.mdef-del');
+  for(var i=0;i<dels.length;i++){
+    dels[i].addEventListener('click',function(){
+      var id=this.dataset.id;
+      defs=defs.filter(function(d){return d.id!==id;});
+      setDefs(defs);render();
+    });
+  }
+  var admet=document.getElementById('admet');
+  if(admet)admet.addEventListener('click',function(){
+    if(defs.length<6){
+      defs.push({id:'m_'+Date.now(),label:'Nová',color:COLORS[defs.length%COLORS.length]});
+      setDefs(defs);render();
+    }
+  });
+}
 
 // ── CALENDAR ──
-function rCal(m){const focus=getF(m),ws=wks(m),now=isCM(m),td=todD();const rows=ws.map(w=>w.map((d,di)=>{if(!d)return`<div class="ccell emp"></div>`;const fd=focus[d-1]||{text:'',status:null},isT=now&&d===td;return`<div class="ccell" style="${isT?'background:var(--bg3);':''}"><span class="daynum ${isT?'tod':''}">${d}</span><textarea class="ctxt ftxt" data-d="${d-1}" placeholder="">${fd.text||''}</textarea><div class="cchk ${fd.status==='done'?'dn':fd.status==='fail'?'fl':''} fchk" data-d="${d-1}">${chkSvg(8,fd.status)}</div></div>`;}).join('')).join('');return`<div class="card" style="padding:0;overflow:hidden;"><div class="cgrid chdr">${DAYS.map(d=>`<div>${d}</div>`).join('')}</div><div class="cgrid" style="border-left:1px solid var(--border);">${rows}</div></div>`;}
-function bCal(m){const focus=getF(m);document.querySelectorAll('.ftxt').forEach(el=>el.addEventListener('input',()=>{focus[+el.dataset.d]={...focus[+el.dataset.d],text:el.value};setF(m,focus);}));document.querySelectorAll('.fchk').forEach(el=>el.addEventListener('click',()=>{const d=+el.dataset.d,old=focus[d]?.status;focus[d]={...focus[d],status:old==='done'?'fail':old==='fail'?null:'done'};setF(m,focus);render();}));}
+function rCal(m){
+  var focus=getF(m),ws=getWks(m),now=isCM(m),td=todD();
+  var rows='';
+  for(var wi=0;wi<ws.length;wi++){
+    var w=ws[wi];
+    for(var di=0;di<w.length;di++){
+      var d=w[di];
+      if(!d){rows+='<div class="ccell emp"></div>';continue;}
+      var fd=focus[d-1]||{text:'',status:null},isT=now&&d===td;
+      rows+='<div class="ccell" style="'+(isT?'background:var(--bg3);':'')+'">'
+        +'<span class="daynum '+(isT?'tod':'')+'">'+d+'</span>'
+        +'<textarea class="ctxt ftxt" data-d="'+(d-1)+'" placeholder="">'+((fd.text)||'')+'</textarea>'
+        +'<div class="cchk '+(fd.status==='done'?'dn':fd.status==='fail'?'fl':'')+' fchk" data-d="'+(d-1)+'">'+chkSvg(8,fd.status)+'</div>'
+        +'</div>';
+    }
+  }
+  return '<div class="card" style="padding:0;overflow:hidden;">'
+    +'<div class="cgrid chdr">'+(DAYS.map(function(d){return '<div>'+d+'</div>';}).join(''))+'</div>'
+    +'<div class="cgrid" style="border-left:1px solid var(--border);">'+rows+'</div>'
+    +'</div>';
+}
+function bCal(m){
+  var focus=getF(m);
+  var txts=document.querySelectorAll('.ftxt');
+  for(var i=0;i<txts.length;i++){
+    txts[i].addEventListener('input',function(){
+      var d=+this.dataset.d;
+      if(!focus[d])focus[d]={text:'',status:null};
+      focus[d].text=this.value;setF(m,focus);
+    });
+  }
+  var chks=document.querySelectorAll('.fchk');
+  for(var i=0;i<chks.length;i++){
+    chks[i].addEventListener('click',function(){
+      var d=+this.dataset.d;
+      if(!focus[d])focus[d]={text:'',status:null};
+      var old=focus[d].status;
+      focus[d].status=old==='done'?'fail':old==='fail'?null:'done';
+      setF(m,focus);render();
+    });
+  }
+}
 
 // ── YEARLY ──
-const YS={showKcal:true,showWeight:true,period:'all'};
 function rYear(){
-  const defs=getDefs();let lastM=0;
-  const all=MONTHS.map((_,i)=>({n:getN(i),h:getD(i),m:getM(i)}));
-  all.forEach((d,i)=>{if(Object.keys(d.n).length+Object.keys(d.h).length+Object.keys(d.m).length>0)lastM=i;});
-
-  // Period filter — determine start day offset
-  const today=new Date(),todayM=today.getMonth(),todayD2=today.getDate()-1;
-  let totalDaysFull=0;for(let i=0;i<=lastM;i++)totalDaysFull+=daysIn(i);
-  let skipDays=0;
-  if(YS.period==='7'){skipDays=Math.max(0,totalDaysFull-7);}
-  else if(YS.period==='14'){skipDays=Math.max(0,totalDaysFull-14);}
-  else if(YS.period==='30'){skipDays=Math.max(0,totalDaysFull-30);}
-
-  let dayCount=0,maxK=2500,pI=[],pO=[],pW=[],wVals=[];
-  all.slice(0,lastM+1).forEach((md,idx)=>{
-    const dim=daysIn(idx);
-    for(let d=0;d<dim;d++){
-      const absDay=dayCount+d;
-      if(absDay<skipDays){continue;}
-      const vI=parseInt(md.n[d]?.kcalIn||''),vO=parseInt(md.n[d]?.kcalOut||'');
-      if(!isNaN(vI)){pI.push({x:absDay-skipDays,y:vI});maxK=Math.max(maxK,vI);}
-      if(!isNaN(vO)){pO.push({x:absDay-skipDays,y:vO});maxK=Math.max(maxK,vO);}
+  var defs=getDefs(),lastM=0;
+  var all=[];
+  for(var i=0;i<MONTHS.length;i++){all.push({n:getN(i),h:getD(i),m:getM(i)});}
+  for(var i=0;i<all.length;i++){
+    if(Object.keys(all[i].n).length+Object.keys(all[i].h).length+Object.keys(all[i].m).length>0)lastM=i;
+  }
+  var dayCount=0,maxK=2500,pI=[],pO=[],pW=[],wVals=[];
+  for(var idx=0;idx<=lastM;idx++){
+    var md=all[idx],dim=daysIn(idx);
+    for(var d=0;d<dim;d++){
+      var vI=parseInt(md.n[d]?md.n[d].kcalIn:''),vO=parseInt(md.n[d]?md.n[d].kcalOut:'');
+      if(!isNaN(vI)){pI.push({x:dayCount+d,y:vI});if(vI>maxK)maxK=vI;}
+      if(!isNaN(vO)){pO.push({x:dayCount+d,y:vO});if(vO>maxK)maxK=vO;}
     }
-    const sd=new Date(YEAR,idx,1);sd.setDate(sd.getDate()+(sd.getDay()===0?0:7-sd.getDay()));let wi=0;
+    var sd=new Date(YEAR,idx,1);sd.setDate(sd.getDate()+(sd.getDay()===0?0:7-sd.getDay()));var wi=0;
     while(sd.getMonth()===idx){
-      const absDay=dayCount+sd.getDate()-1;
-      if(absDay>=skipDays){const w=parseFloat(md.m[wi]?.[defs[0]?.id]);if(!isNaN(w)){pW.push({x:absDay-skipDays,y:w});wVals.push(w);}}
+      var w=parseFloat(md.m[wi]?md.m[wi][defs[0]?defs[0].id:'weight']:NaN);
+      if(!isNaN(w)){pW.push({x:dayCount+sd.getDate()-1,y:w});wVals.push(w);}
       sd.setDate(sd.getDate()+7);wi++;
     }
     dayCount+=dim;
-  });
-  const visibleDays=totalDaysFull-skipDays;
-  maxK*=1.1;const minW=wVals.length?Math.min(...wVals)*.97:50,maxW=wVals.length?Math.max(...wVals)*1.03:100,rW=maxW-minW||1;
-  const W=300,H=100,sx=W/(visibleDays||1);
-  const mp=(pts,fy)=>pts.length?pts.map((p,i)=>`${i===0?'M':'L'} ${(p.x*sx).toFixed(1)} ${fy(p.y).toFixed(1)}`).join(' '):'';
-  const pathI=mp(pI,y=>H-(y/maxK)*H),pathO=mp(pO,y=>H-(y/maxK)*H),pathW=mp(pW,y=>H-((y-minW)/rW)*H),wc=defs[0]?.color||COLORS[0];
+  }
+  maxK*=1.1;
+  var minW=wVals.length?Math.min.apply(null,wVals)*.97:50;
+  var maxW=wVals.length?Math.max.apply(null,wVals)*1.03:100;
+  var rW=maxW-minW||1;
+  var W=300,H=100,sx=W/(dayCount||1);
+  function mp(pts,fy){if(!pts.length)return '';var s='';for(var i=0;i<pts.length;i++)s+=(i===0?'M':'L')+' '+(pts[i].x*sx).toFixed(1)+' '+fy(pts[i].y).toFixed(1)+' ';return s;}
+  var pathI=mp(pI,function(y){return H-(y/maxK)*H;});
+  var pathO=mp(pO,function(y){return H-(y/maxK)*H;});
+  var pathW=mp(pW,function(y){return H-((y-minW)/rW)*H;});
+  var wc=defs[0]?defs[0].color:COLORS[0];
 
-  const periods=[['all','Vše'],['30','30 dní'],['14','14 dní'],['7','7 dní']];
+  var wDots='';
+  for(var i=0;i<pW.length;i++){
+    var cx=(pW[i].x*sx).toFixed(1),cy=(H-((pW[i].y-minW)/rW)*H).toFixed(1);
+    wDots+='<circle cx="'+cx+'" cy="'+cy+'" r="3" fill="var(--bg)" stroke="'+wc+'" stroke-width="1.5"/>';
+    wDots+='<text x="'+cx+'" y="'+(H-((pW[i].y-minW)/rW)*H-8).toFixed(1)+'" text-anchor="middle" font-size="6" fill="'+wc+'" font-weight="700">'+pW[i].y+'</text>';
+  }
 
-  const mCards=MONTHS.map((name,i)=>{const nd=getN(i),hd=getD(i),ha=getH(i),dim=daysIn(i);let logged=0,hdn=0,htot=0;for(let d=0;d<dim;d++)if(nd[d]?.kcalIn||nd[d]?.kcalOut)logged++;ha.forEach((_,h)=>{for(let d=0;d<dim;d++){htot++;if(hd[`${h}-${d}`]==='done')hdn++;}});const has=logged>0||hdn>0,pct=htot?Math.round(hdn/htot*100):0;return`<div class="ymcard" style="border-color:${has?'var(--border)':'#111'};"><div style="font-size:8px;font-weight:700;color:${has?'var(--acc)':'#252525'};text-transform:uppercase;margin-bottom:3px;">${name.slice(0,3)}</div>${has?`<div style="font-size:7px;color:var(--muted);">Kcal: <span style="color:#777">${logged}/${dim}d</span></div><div style="font-size:7px;color:var(--muted);">Návyky: <span style="color:var(--acc)">${pct}%</span></div>`:`<div style="font-size:7px;color:#222;">—</div>`}</div>`;}).join('');
+  var mCards='';
+  for(var i=0;i<MONTHS.length;i++){
+    var nd=getN(i),hd=getD(i),ha=getH(i),dim=daysIn(i);
+    var logged=0,hdn=0,htot=0;
+    for(var d=0;d<dim;d++)if(nd[d]&&(nd[d].kcalIn||nd[d].kcalOut))logged++;
+    for(var h=0;h<ha.length;h++){for(var d=0;d<dim;d++){htot++;if(hd[h+'-'+d]==='done')hdn++;}}
+    var has=logged>0||hdn>0,pct=htot?Math.round(hdn/htot*100):0;
+    mCards+='<div class="ymcard" style="border-color:'+(has?'var(--border)':'#111')+';">'
+      +'<div style="font-size:8px;font-weight:700;color:'+(has?'var(--acc)':'#252525')+';text-transform:uppercase;margin-bottom:3px;">'+MONTHS[i].slice(0,3)+'</div>'
+      +(has?'<div style="font-size:7px;color:var(--muted);">Kcal: <span style="color:#777">'+logged+'/'+dim+'d</span></div><div style="font-size:7px;color:var(--muted);">Návyky: <span style="color:var(--acc)">'+pct+'%</span></div>':'<div style="font-size:7px;color:#222;">—</div>')
+      +'</div>';
+  }
 
-  return`<div class="sgrid" style="margin-bottom:10px;">
-    <button class="btn btn-acc btn-full" style="margin:0;" onclick="doExport()">💾 Export dat</button>
-    <label class="btn btn-full" style="cursor:pointer;justify-content:center;margin:0;">📂 Import zálohy<input type="file" accept=".json" style="display:none;" onchange="doImport(this.files[0])"></label>
-  </div>
-  <div class="card">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-      <div class="card-title" style="margin:0;">Metabolický vývoj ${YEAR}</div>
-      <button onclick="YS.showKcal=!YS.showKcal;render();" style="background:transparent;border:1px solid var(--border2);border-radius:4px;color:${YS.showKcal?'var(--acc)':'var(--muted)'};font-size:8px;padding:2px 6px;cursor:pointer;">${YS.showKcal?'▾ Skrýt':'▸ Zobrazit'}</button>
-    </div>
-    <div style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap;">
-      ${periods.map(([k,l])=>`<button onclick="YS.period='${k}';render();" style="padding:3px 8px;font-size:8px;border-radius:4px;border:1px solid ${YS.period===k?'var(--acc)':'var(--border2)'};background:${YS.period===k?'rgba(204,255,0,.1)':'transparent'};color:${YS.period===k?'var(--acc)':'var(--muted)'};cursor:pointer;">${l}</button>`).join('')}
-    </div>
-    ${YS.showKcal?`<div style="display:flex;gap:8px;margin-bottom:6px;flex-wrap:wrap;"><div style="display:flex;align-items:center;gap:3px;font-size:8px;color:var(--muted);"><div style="width:10px;height:2px;background:var(--acc);opacity:.6;"></div>Příjem</div><div style="display:flex;align-items:center;gap:3px;font-size:8px;color:var(--muted);"><div style="width:10px;height:2px;background:var(--acc2);opacity:.6;"></div>Výdej</div><div style="display:flex;align-items:center;gap:3px;font-size:8px;color:var(--muted);"><div style="width:7px;height:7px;border-radius:50%;background:${wc};"></div>Váha</div></div><svg viewBox="0 0 300 100" style="width:100%;height:85px;" preserveAspectRatio="none">${pathI?`<path d="${pathI}" fill="none" stroke="var(--acc)" stroke-width="1" opacity=".5"/>`:''}${pathO?`<path d="${pathO}" fill="none" stroke="var(--acc2)" stroke-width="1" opacity=".5"/>`:''}${pathW?`<path d="${pathW}" fill="none" stroke="${wc}" stroke-width="2.5"/>`:''}${pW.map(p=>`<circle cx="${(p.x*sx).toFixed(1)}" cy="${(H-((p.y-minW)/rW)*H).toFixed(1)}" r="3" fill="var(--bg)" stroke="${wc}" stroke-width="1.5"/><text x="${(p.x*sx).toFixed(1)}" y="${(H-((p.y-minW)/rW)*H-8).toFixed(1)}" text-anchor="middle" font-size="6" fill="${wc}" font-weight="700">${p.y}</text>`).join('')}</svg>`:''}
-  </div>
-  <div class="card"><div class="card-title">Přehled po měsících</div><div class="ymgrid">${mCards}</div></div>`;
+  var mLabels='';
+  for(var i=0;i<=lastM;i++)mLabels+='<div style="flex:1;text-align:center;font-size:5px;color:#2a2a2a;text-transform:uppercase;">'+MONTHS[i].slice(0,3)+'</div>';
+
+  return '<div class="sgrid" style="margin-bottom:10px;">'
+    +'<button class="btn btn-acc btn-full" style="margin:0;" onclick="doExport()">💾 Export dat</button>'
+    +'<label class="btn btn-full" style="cursor:pointer;justify-content:center;margin:0;">📂 Import zálohy<input type="file" accept=".json" style="display:none;" onchange="doImport(this.files[0])"></label>'
+    +'</div>'
+    +'<div class="card"><div class="card-title">Metabolický vývoj '+YEAR+'</div>'
+    +'<div style="display:flex;gap:8px;margin-bottom:6px;">'
+    +'<div style="display:flex;align-items:center;gap:3px;font-size:8px;color:var(--muted);"><div style="width:10px;height:2px;background:var(--acc);opacity:.6;"></div>Příjem</div>'
+    +'<div style="display:flex;align-items:center;gap:3px;font-size:8px;color:var(--muted);"><div style="width:10px;height:2px;background:var(--acc2);opacity:.6;"></div>Výdej</div>'
+    +'<div style="display:flex;align-items:center;gap:3px;font-size:8px;color:var(--muted);"><div style="width:7px;height:7px;border-radius:50%;background:'+wc+';"></div>Váha</div>'
+    +'</div>'
+    +'<svg viewBox="0 0 300 100" style="width:100%;height:85px;" preserveAspectRatio="none">'
+    +(pathI?'<path d="'+pathI+'" fill="none" stroke="var(--acc)" stroke-width="1" opacity=".5"/>':'')
+    +(pathO?'<path d="'+pathO+'" fill="none" stroke="var(--acc2)" stroke-width="1" opacity=".5"/>':'')
+    +(pathW?'<path d="'+pathW+'" fill="none" stroke="'+wc+'" stroke-width="2.5"/>':'')
+    +wDots
+    +'</svg>'
+    +'<div style="display:flex;margin-top:3px;">'+mLabels+'</div>'
+    +'</div>'
+    +'<div class="card"><div class="card-title">Přehled po měsících</div><div class="ymgrid">'+mCards+'</div></div>';
 }
 
 // INIT
-function init(){buildMnav();updateBUI();autoBackup();document.getElementById('mname').textContent=MONTHS[S.month];setTimeout(()=>{const a=document.querySelector('.mbtn.on');if(a)a.scrollIntoView({inline:'center',behavior:'smooth'});},100);render();}
+function init(){
+  buildMnav();updateBUI();autoBackup();
+  document.getElementById('mname').textContent=MONTHS[S.month];
+  setTimeout(function(){var a=document.querySelector('.mbtn.on');if(a)a.scrollIntoView({inline:'center',behavior:'smooth'});},100);
+  render();
+}
 init();
 </script>
 </body>
