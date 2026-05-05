@@ -78,6 +78,28 @@ input[type=number]{-moz-appearance:textfield;}
 .ymcard{background:var(--bg3);border-radius:6px;padding:8px;border:1px solid var(--border);}
 .acc{color:var(--acc);}.acc2{color:var(--acc2);}.red{color:var(--red);}
 .hidden{display:none!important;}
+/* Rok filter */
+.yr-filter{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;}
+.yr-chip{background:var(--bg3);border:1px solid var(--border2);border-radius:4px;padding:3px 8px;cursor:pointer;color:var(--muted);font-size:8px;font-weight:700;text-transform:uppercase;white-space:nowrap;}
+.yr-chip.on{background:var(--acc);color:#000;border-color:var(--acc);}
+.yr-chip.on2{background:var(--acc2);color:#000;border-color:var(--acc2);}
+.yr-section{background:var(--bg3);border-radius:6px;padding:8px;margin-bottom:8px;}
+.yr-section-title{font-size:8px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;}
+/* Měsíční delta bunky */
+.ym-delta{font-size:9px;font-weight:700;}
+.ym-delta.pos{color:var(--acc2);}
+.ym-delta.neg{color:var(--acc);}
+.ym-delta.neu{color:var(--muted);}
+/* Streak zlaté orámování segmentů */
+.streak-seg{filter:drop-shadow(0 0 2.5px #FFD700) drop-shadow(0 0 5px #FFD70088);}
+/* Rok — klouzavý průměr a predikce přepínače */
+.yr-ma-chip{background:var(--bg3);border:1px solid #FFD70066;border-radius:4px;padding:3px 8px;cursor:pointer;color:#996600;font-size:8px;font-weight:700;text-transform:uppercase;white-space:nowrap;}
+.yr-ma-chip.on{background:#332200;color:#FFD700;border-color:#FFD700;}
+/* Tělo — info box */
+.body-info-row{display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);}
+.body-info-row:last-child{border-bottom:none;}
+.body-info-lbl{font-size:8px;color:var(--muted);}
+.body-info-val{font-size:10px;font-weight:700;}
 </style>
 </head>
 <body>
@@ -91,7 +113,7 @@ input[type=number]{-moz-appearance:textfield;}
       <div class="htitle">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--acc)" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
         <span>Plánovač</span>
-        <span style="color:var(--muted);font-size:8px;">v3.5</span>
+        <span style="color:var(--muted);font-size:8px;">v3.7</span>
       </div>
       <div class="hactions">
         <button class="bpill" id="bpill" onclick="doExport()">
@@ -129,11 +151,38 @@ var MONTHS=['Leden','Únor','Březen','Duben','Květen','Červen','Červenec','S
 var DAYS=['Po','Út','St','Čt','Pá','So','Ne'];
 var COLORS=['#FF3366','#22D3EE','#FACC15','#A78BFA','#4ADE80','#FB923C'];
 
+// ── Automatické zavření klávesnice po 1s nečinnosti ──
+var kbTimer=null;
+function armKeyboard(el){
+  clearTimeout(kbTimer);
+  kbTimer=setTimeout(function(){
+    if(document.activeElement===el)el.blur();
+  },1000);
+}
+function bindKbHide(){
+  document.addEventListener('input',function(e){
+    var t=e.target;
+    if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA')){
+      armKeyboard(t);
+    }
+  },true);
+  // Klik mimo input zruší timer a zavře klávesnici okamžitě
+  document.addEventListener('click',function(e){
+    var t=e.target;
+    if(t&&t.tagName!=='INPUT'&&t.tagName!=='TEXTAREA'){
+      clearTimeout(kbTimer);
+      if(document.activeElement&&(document.activeElement.tagName==='INPUT'||document.activeElement.tagName==='TEXTAREA')){
+        document.activeElement.blur();
+      }
+    }
+  },true);
+}
+
 // Storage
 function sg(k,fb){try{var v=localStorage.getItem(k);if(!v)return fb;var p=JSON.parse(v);return p==null?fb:p;}catch(e){return fb;}}
 function ss(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
 
-// Data keys — same as original app
+// Data keys
 function kH(m){return 'habit_tracker_habits_'+m;}
 function kD(m){return 'habit_tracker_data_'+m;}
 function kN(m){return 'habit_tracker_nutrition_data_'+m;}
@@ -193,6 +242,19 @@ function chkSvg(c,s){
 
 // State
 var S={tab:'habits',month:new Date().getMonth(),fd:null,delMode:false};
+
+// Rok filter state — které grafy a jaké období
+var YF={
+  showKcalIn:true,
+  showKcalOut:true,
+  showWeight:true,
+  fromMonth:0,
+  toMonth:new Date().getMonth(),
+  showMA7:false,
+  showMA14:false,
+  showPred:false,
+  goalWeight:79.0
+};
 
 // Backup
 function doExport(){
@@ -312,7 +374,7 @@ function render(){
   else if(S.tab==='nutrition'){c.innerHTML=rNutr(m);bNutr(m);}
   else if(S.tab==='body'){c.innerHTML=rBody(m);bBody(m);}
   else if(S.tab==='calendar'){c.innerHTML=rCal(m);bCal(m);}
-  else if(S.tab==='yearly'){c.innerHTML=rYear();}
+  else if(S.tab==='yearly'){c.innerHTML=rYear();bYear();}
 }
 
 // ── HABITS ──
@@ -328,7 +390,6 @@ function rHabits(m){
   var stats=[];
   for(var h=0;h<habits.length;h++){var n=0;for(var d=0;d<dim;d++)if(data[h+'-'+d]==='done')n++;stats.push(Math.round(n/dim*100));}
 
-  // Arc path builder
   function arcPath(rI,rO,sA,eA){
     var sR=(sA-90)*Math.PI/180,eR=(eA-90)*Math.PI/180,k=(4/3)*Math.tan((eR-sR)/4);
     var p0x=CX+rO*Math.cos(sR),p0y=CY+rO*Math.sin(sR);
@@ -344,12 +405,30 @@ function rHabits(m){
   }
   function pol(r,deg){var rad=(deg-90)*Math.PI/180;return{x:CX+r*Math.cos(rad),y:CY+r*Math.sin(rad)};}
 
-  // Focus rotation
   var focusD=S.fd!==null?S.fd:td;
   var focusAngle=focusD*APD+APD/2;
   var rotDeg=S.fd!==null?-focusAngle:0;
 
   var ringPaths='';
+  // Zlatý streak = done od 1. dne měsíce bez přerušení.
+  // Přerušení = fail nebo prázdný slot v minulosti. Zlatý streak pak skončí navždy.
+  var streakSet={};
+  var todayIdx2=isCM(m)?todD()-1:dim-1;
+  for(var h=0;h<habits.length;h++){
+    var broken=false;
+    for(var d=0;d<=todayIdx2;d++){
+      var sv=data[h+'-'+d];
+      if(sv==='done'){
+        if(!broken)streakSet[h+'-'+d]=true;
+      } else if(sv==='fail'){
+        broken=true;
+      } else {
+        // prázdný slot — přerušení jen pokud je to minulý den (ne dnešek)
+        if(d<todayIdx2)broken=true;
+      }
+    }
+  }
+
   for(var d=0;d<dim;d++){
     if(perf[d]){
       var dim2=S.fd!==null&&d!==S.fd;
@@ -361,13 +440,14 @@ function rHabits(m){
     for(var d=0;d<dim;d++){
       var s=data[h+'-'+d]||null;
       var isT=now&&d===td,dim2=S.fd!==null&&d!==S.fd;
+      var isStreak=streakSet[h+'-'+d]&&s==='done';
       var fill=s==='done'?'#CCFF00':s==='fail'?'rgba(51,153,255,.35)':'transparent';
-      var strokeC=isT&&s!=='done'?'#CCFF0088':'#1e1e1e';
-      var strokeW=isT&&s!=='done'?1.2:.3;
-      ringPaths+='<path d="'+arcPath(rI,rO,d*APD,(d+1)*APD-.3)+'" fill="'+fill+'" stroke="'+strokeC+'" stroke-width="'+strokeW+'" opacity="'+(dim2?.12:1)+'" data-h="'+h+'" data-d="'+d+'" class="rs" style="cursor:pointer"/>';
+      var strokeC=isStreak?'#FFD700':(isT&&s!=='done'?'#CCFF0088':'#1e1e1e');
+      var strokeW=isStreak?1.8:(isT&&s!=='done'?1.2:.3);
+      var extraClass=isStreak?' class="rs streak-seg"':' class="rs"';
+      ringPaths+='<path d="'+arcPath(rI,rO,d*APD,(d+1)*APD-.3)+'" fill="'+fill+'" stroke="'+strokeC+'" stroke-width="'+strokeW+'" opacity="'+(dim2?.12:1)+'"'+extraClass+' data-h="'+h+'" data-d="'+d+'" style="cursor:pointer"/>';
     }
   }
-  // Day labels — outside rotating group, positions rotated mathematically
   var dayLabels='';
   for(var d=0;d<dim;d++){
     var angle=d*APD+APD/2+rotDeg;
@@ -379,7 +459,6 @@ function rHabits(m){
     dayLabels+='<text x="'+pos.x.toFixed(1)+'" y="'+pos.y.toFixed(1)+'" text-anchor="middle" dominant-baseline="middle" font-size="'+fs+'" font-weight="'+fw+'" fill="'+fill+'" opacity="'+op+'" data-day="'+d+'" class="dl" style="cursor:pointer'+(isT?';filter:drop-shadow(0 0 3px #CCFF00)':'')+'">'+(d+1)+'</text>';
   }
 
-  // Habit labels left of ring
   var habitLabels='';
   for(var i=0;i<habits.length;i++){
     var ringIdx=habits.length-1-i;
@@ -393,7 +472,6 @@ function rHabits(m){
       +'</div>';
   }
 
-  // Focus panel
   var fp='';
   if(S.fd!==null){
     var prevD=S.fd>0?S.fd-1:null,nextD=S.fd<dim-1?S.fd+1:null;
@@ -513,79 +591,217 @@ function bHabits(m){
 }
 
 // ── NUTRITION ──
+// Pomocník: načti kcal data pro libovolný den (může být z jiného měsíce)
+function getKcalDay(month, dayIdx){
+  if(month<0||month>11)return {kcalIn:0,kcalOut:0};
+  var nd=getN(month);
+  var vI=parseInt(nd[dayIdx]?nd[dayIdx].kcalIn:'')||0;
+  var vO=parseInt(nd[dayIdx]?nd[dayIdx].kcalOut:'')||0;
+  return {kcalIn:vI,kcalOut:vO};
+}
+
 function rNutr(m){
   var data=getN(m),dim=daysIn(m),ws=getWks(m),now=isCM(m),td=todD();
+  var prevM=m>0?m-1:-1;
+  var prevDim=prevM>=0?daysIn(prevM):0;
+
+  // Celkovy soucet mesice (jen dny v tomto mesici)
   var sI=0,cI=0,sO=0,cO=0;
   for(var d=0;d<dim;d++){
     var vI=parseInt(data[d]?data[d].kcalIn:''),vO=parseInt(data[d]?data[d].kcalOut:'');
-    if(!isNaN(vI)){sI+=vI;cI++;}if(!isNaN(vO)){sO+=vO;cO++;}
+    if(!isNaN(vI)&&vI>0){sI+=vI;cI++;}
+    if(!isNaN(vO)&&vO>0){sO+=vO;cO++;}
   }
   var aI=cI?Math.round(sI/cI):0,aO=cO?Math.round(sO/cO):0,diff=sI-sO;
+
+  // Mini-graf
   var maxK=2500,lf=-1;
   for(var d=0;d<dim;d++)if(data[d]&&(data[d].kcalIn||data[d].kcalOut))lf=d;
   var pI=[],pO=[];
   for(var d=0;d<=lf;d++){
-    var vI=parseInt(data[d]?data[d].kcalIn:''),vO=parseInt(data[d]?data[d].kcalOut:'');
-    if(!isNaN(vI)){pI.push({x:d,y:vI});if(vI>maxK)maxK=vI;}
-    if(!isNaN(vO)){pO.push({x:d,y:vO});if(vO>maxK)maxK=vO;}
+    var vI2=parseInt(data[d]?data[d].kcalIn:''),vO2=parseInt(data[d]?data[d].kcalOut:'');
+    if(!isNaN(vI2)&&vI2>0){pI.push({x:d,y:vI2});if(vI2>maxK)maxK=vI2;}
+    if(!isNaN(vO2)&&vO2>0){pO.push({x:d,y:vO2});if(vO2>maxK)maxK=vO2;}
   }
   maxK*=1.1;var W=300,H=65,sx=W/(dim-1||1);
   function mp(pts,fy){if(!pts.length)return '';var s='';for(var i=0;i<pts.length;i++)s+=(i===0?'M':'L')+' '+(pts[i].x*sx).toFixed(1)+' '+fy(pts[i].y).toFixed(1)+' ';return s;}
   var pathI=mp(pI,function(y){return H-(y/maxK)*H;}),pathO=mp(pO,function(y){return H-(y/maxK)*H;});
 
-  var calRows='';
+  // Vahova data z telesnych metrik
+  var defs=getDefs();
+  var weightId='weight';
+  for(var di=0;di<defs.length;di++){
+    if(defs[di].id==='weight'||defs[di].label.indexOf('V\u00e1ha')>=0){weightId=defs[di].id;break;}
+  }
+  var bodyM=getM(m);
+  var bodyPrev=prevM>=0?getM(prevM):{};
+  var sunsM=getSuns(m);
+  var sunsPrev=prevM>=0?getSuns(prevM):[];
+
+  // Predpocitej kcal soucty pro kazdy tyden vcetne presahu do predchoziho mesice
+  var weekTotals=[];
   for(var wI=0;wI<ws.length;wI++){
-    var w=ws[wI],tI=0,tO=0;
-    for(var di=0;di<w.length;di++){
-      var d=w[di];if(!d)continue;
-      var vI=parseInt(data[d-1]?data[d-1].kcalIn:'0')||0;
-      var vO=parseInt(data[d-1]?data[d-1].kcalOut:'0')||0;
-      if(vI>0||vO>0){tI+=vI;tO+=vO;}
-    }
-    var wDiff=tI-tO;
-    for(var di=0;di<w.length;di++){
+    var w=ws[wI];
+    var tI=0,tO=0,hasAny=false;
+    for(var di=0;di<7;di++){
       var d=w[di];
-      if(!d){calRows+='<div class="ccell emp"></div>';continue;}
-      var iV=data[d-1]?data[d-1].kcalIn||'':'',oV=data[d-1]?data[d-1].kcalOut||'':'';
-      var df=(parseInt(iV)||0)-(parseInt(oV)||0),has=iV||oV,isT=now&&d===td;
-      calRows+='<div class="ccell" style="'+(isT?'background:var(--bg3);':'')+'">'
-        +'<span class="daynum '+(isT?'tod':'')+'">'+d+'</span>'
-        +'<input class="ni ni-in acc" data-d="'+(d-1)+'" placeholder="in" value="'+iV+'" type="number">'
-        +'<input class="ni ni-out acc2" data-d="'+(d-1)+'" placeholder="out" value="'+oV+'" type="number">'
-        +(has?'<div style="font-size:7px;color:'+(df>0?'var(--red)':'var(--acc)')+';text-align:right;margin-top:auto;">'+(df>0?'+':'')+df+'</div>':'')
-        +'</div>';
+      var vI3,vO3;
+      if(!d){
+        if(prevM>=0&&wI===0){
+          var fd=firstDow(m);
+          var prevDay=prevDim-fd+di;
+          if(prevDay>=0&&prevDay<prevDim){
+            var kd=getKcalDay(prevM,prevDay);
+            vI3=kd.kcalIn;vO3=kd.kcalOut;
+            if(vI3>0||vO3>0){tI+=vI3;tO+=vO3;hasAny=true;}
+          }
+        }
+      } else {
+        vI3=parseInt(data[d-1]?data[d-1].kcalIn:'')||0;
+        vO3=parseInt(data[d-1]?data[d-1].kcalOut:'')||0;
+        if(vI3>0||vO3>0){tI+=vI3;tO+=vO3;hasAny=true;}
+      }
     }
-    calRows+='<div class="ccell" style="background:#0f0f0f;justify-content:center;gap:2px;">'
-      +'<div style="font-size:6px;color:var(--muted);">Σ kcal</div>'
-      +'<div style="font-size:9px;font-weight:700;color:'+(wDiff>0?'var(--red)':'var(--acc)')+';">'+(wDiff>0?'+':'')+wDiff+'</div>'
-      +'</div>';
+    weekTotals.push({tI:tI,tO:tO,hasAny:hasAny,diff:tI-tO});
   }
 
-  var html='<div class="sgrid">'
-    +'<div class="sbox"><div class="slabel">Ø Příjem</div><div class="sval acc">'+aI+'</div><div class="sunit">kcal/den</div></div>'
-    +'<div class="sbox"><div class="slabel">Ø Výdej</div><div class="sval acc2">'+aO+'</div><div class="sunit">kcal/den</div></div>'
-    +'</div>'
-    +'<div class="sbox" style="margin-bottom:10px;"><div class="slabel">Celkový deficit</div>'
-    +'<div class="sval '+(diff<0?'acc':'red')+'">'+(diff>0?'+':'')+diff+' <span class="sunit">kcal</span></div></div>';
-  if(pathI||pathO){
-    html+='<div class="card"><div style="display:flex;gap:10px;margin-bottom:6px;">'
-      +'<div style="display:flex;align-items:center;gap:3px;font-size:8px;color:var(--muted);"><div style="width:10px;height:2px;background:var(--acc);"></div>Příjem</div>'
-      +'<div style="display:flex;align-items:center;gap:3px;font-size:8px;color:var(--muted);"><div style="width:10px;height:2px;background:var(--acc2);"></div>Výdej</div>'
-      +'</div>'
-      +'<svg viewBox="0 0 300 65" style="width:100%;height:55px;" preserveAspectRatio="none">'
-      +(pathI?'<path d="'+pathI+'" fill="none" stroke="var(--acc)" stroke-width="1.5" opacity=".8"/>'  :'')
-      +(pathO?'<path d="'+pathO+'" fill="none" stroke="var(--acc2)" stroke-width="1.5" opacity=".8"/>':'')
-      +'</svg></div>';
+  // Delta vahy: nedele tohoto tydne vs nedele predchoziho tydne
+  function getWkSunWeight(wI){
+    var w=ws[wI];
+    var sunDay=w[6];
+    if(!sunDay)return NaN;
+    for(var i=0;i<sunsM.length;i++){
+      if(sunsM[i].getDate()===sunDay)return parseFloat(bodyM[i]?bodyM[i][weightId]:NaN);
+    }
+    return NaN;
   }
-  html+='<div class="card" style="padding:0;overflow:hidden;">'
-    +'<div class="cgrid-8 chdr8">';
+  function getPrevWkSunWeight(wI){
+    if(wI===0){
+      if(prevM<0||sunsPrev.length===0)return NaN;
+      var bPrev=getM(prevM);
+      return parseFloat(bPrev[sunsPrev.length-1]?bPrev[sunsPrev.length-1][weightId]:NaN);
+    }
+    return getWkSunWeight(wI-1);
+  }
+
+  var calRows='';
+  for(var wI=0;wI<ws.length;wI++){
+    var w=ws[wI];
+    var wt=weekTotals[wI];
+    var wDiff=wt.diff;
+    var wCurW=getWkSunWeight(wI);
+    var wPrevW=getPrevWkSunWeight(wI);
+    var wDeltaKg=(!isNaN(wCurW)&&!isNaN(wPrevW))?(wCurW-wPrevW):NaN;
+
+    for(var di=0;di<w.length;di++){
+      var d=w[di];
+      if(!d){
+        var fd=firstDow(m);
+        var prevDay2=prevDim-fd+di;
+        if(wI===0&&prevM>=0&&prevDay2>=0&&prevDay2<prevDim){
+          var kd2=getKcalDay(prevM,prevDay2);
+          var pvI=kd2.kcalIn,pvO=kd2.kcalOut;
+          var pDf=pvI-pvO,pHas=pvI>0||pvO>0;
+          calRows+='<div class="ccell" style="opacity:.38;">';
+          calRows+='<span class="daynum" style="color:#333;">'+(prevDay2+1)+'</span>';
+          calRows+='<div style="font-size:7px;color:#2a2a2a;">'+MONTHS[prevM].slice(0,3)+'</div>';
+          if(pHas)calRows+='<div style="font-size:7px;color:#2a2a2a;text-align:right;margin-top:auto;">'+(pDf>0?'+':'')+pDf+'</div>';
+          calRows+='</div>';
+        } else {
+          calRows+='<div class="ccell emp"></div>';
+        }
+        continue;
+      }
+      var iV=data[d-1]?data[d-1].kcalIn||'':'',oV=data[d-1]?data[d-1].kcalOut||'':'';
+      var df=(parseInt(iV)||0)-(parseInt(oV)||0),has=iV||oV,isT=now&&d===td;
+      calRows+='<div class="ccell" style="'+(isT?'background:var(--bg3);':'')+'">';
+      calRows+='<span class="daynum '+(isT?'tod':'')+'">'+d+'</span>';
+      calRows+='<input class="ni ni-in acc" data-d="'+(d-1)+'" placeholder="in" value="'+iV+'" type="number">';
+      calRows+='<input class="ni ni-out acc2" data-d="'+(d-1)+'" placeholder="out" value="'+oV+'" type="number">';
+      if(has)calRows+='<div style="font-size:7px;color:'+(df>0?'var(--red)':'var(--acc)')+';text-align:right;margin-top:auto;">'+(df>0?'+':'')+df+'</div>';
+      calRows+='</div>';
+    }
+
+    // Tydenni souhrnny sloupec — Σ kcal + delta vaha
+    var hasDelta=!isNaN(wDeltaKg);
+    var deltaKgStr=hasDelta?(wDeltaKg>0?'+':'')+wDeltaKg.toFixed(1)+' kg':'—';
+    var deltaKgColor=hasDelta?(wDeltaKg>0?'var(--red)':'var(--acc)'):'#333';
+    calRows+='<div class="ccell" style="background:#0f0f0f;justify-content:center;gap:1px;padding:3px 2px;">';
+    calRows+='<div style="font-size:5px;color:var(--muted);text-align:center;">\u03a3 kcal</div>';
+    calRows+='<div style="font-size:8px;font-weight:700;color:'+(wDiff>0?'var(--red)':'var(--acc)')+';text-align:center;">'+(wt.hasAny?(wDiff>0?'+':'')+wDiff:'—')+'</div>';
+    calRows+='<div style="width:100%;height:1px;background:#252525;margin:2px 0;"></div>';
+    calRows+='<div style="font-size:5px;color:var(--muted);text-align:center;">\u0394 v\u00e1ha</div>';
+    calRows+='<div style="font-size:8px;font-weight:700;color:'+deltaKgColor+';text-align:center;">'+deltaKgStr+'</div>';
+    calRows+='</div>';
+  }
+
+  // Celkove shrnuti
+  var firstSunW=NaN,lastSunW=NaN;
+  for(var i=0;i<sunsM.length;i++){
+    var v=parseFloat(bodyM[i]?bodyM[i][weightId]:NaN);
+    if(!isNaN(v)){if(isNaN(firstSunW))firstSunW=v;lastSunW=v;}
+  }
+  var totalDeltaKg=(!isNaN(firstSunW)&&!isNaN(lastSunW))?(lastSunW-firstSunW):NaN;
+  var estFatKg=diff!==0?(-diff/7700):NaN;
+
+  var summaryHtml='';
+  if(!isNaN(totalDeltaKg)||Math.abs(diff)>0){
+    summaryHtml='<div class="card" style="padding:10px 12px;">';
+    summaryHtml+='<div class="card-title">Celkov\u00fd p\u0159ehled m\u011bs\u00edce</div>';
+    summaryHtml+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">';
+    summaryHtml+='<div class="sbox" style="padding:7px;">';
+    summaryHtml+='<div class="slabel">\u03a3 deficit / p\u0159ebytek</div>';
+    summaryHtml+='<div style="font-size:15px;font-weight:700;color:'+(diff<0?'var(--acc)':'var(--red)')+'">'+(diff>0?'+':'')+diff+'</div>';
+    summaryHtml+='<div class="sunit">kcal za m\u011bs\u00edc</div></div>';
+    if(!isNaN(estFatKg)){
+      summaryHtml+='<div class="sbox" style="padding:7px;">';
+      summaryHtml+='<div class="slabel">Odhad ze spalov\u00e1n\u00ed</div>';
+      summaryHtml+='<div style="font-size:15px;font-weight:700;color:'+(estFatKg>0?'var(--acc)':'var(--red)')+'">'+(estFatKg>0?'\u2212':'+')+(Math.abs(estFatKg)).toFixed(2)+'</div>';
+      summaryHtml+='<div class="sunit">kg tuku (7700 kcal)</div></div>';
+    } else { summaryHtml+='<div></div>'; }
+    if(!isNaN(totalDeltaKg)){
+      summaryHtml+='<div class="sbox" style="padding:7px;">';
+      summaryHtml+='<div class="slabel">Skute\u010dn\u00e1 zm\u011bna v\u00e1hy</div>';
+      summaryHtml+='<div style="font-size:15px;font-weight:700;color:'+(totalDeltaKg<0?'var(--acc)':'var(--red)')+'">'+(totalDeltaKg>0?'+':'')+totalDeltaKg.toFixed(1)+'</div>';
+      summaryHtml+='<div class="sunit">kg (prvn\u00ed \u2192 posledn\u00ed m\u011b\u0159.)</div></div>';
+    } else { summaryHtml+='<div></div>'; }
+    if(!isNaN(totalDeltaKg)&&!isNaN(estFatKg)){
+      var diff2=totalDeltaKg-(-estFatKg);
+      summaryHtml+='<div class="sbox" style="padding:7px;">';
+      summaryHtml+='<div class="slabel">Rozd\u00edl odhad vs. v\u00e1ha</div>';
+      summaryHtml+='<div style="font-size:15px;font-weight:700;color:var(--muted2);">'+(diff2>0?'+':'')+diff2.toFixed(2)+'</div>';
+      summaryHtml+='<div class="sunit">kg (voda, sval, \u2026)</div></div>';
+    } else { summaryHtml+='<div></div>'; }
+    summaryHtml+='</div></div>';
+  }
+
+  var html='<div class="sgrid">';
+  html+='<div class="sbox"><div class="slabel">\u00d8 P\u0159\u00edjem</div><div class="sval acc">'+aI+'</div><div class="sunit">kcal/den</div></div>';
+  html+='<div class="sbox"><div class="slabel">\u00d8 V\u00fddej</div><div class="sval acc2">'+aO+'</div><div class="sunit">kcal/den</div></div>';
+  html+='</div>';
+  html+='<div class="sbox" style="margin-bottom:10px;"><div class="slabel">Celkov\u00fd deficit</div>';
+  html+='<div class="sval '+(diff<0?'acc':'red')+'">'+(diff>0?'+':'')+diff+' <span class="sunit">kcal</span></div></div>';
+  if(pathI||pathO){
+    html+='<div class="card"><div style="display:flex;gap:10px;margin-bottom:6px;">';
+    html+='<div style="display:flex;align-items:center;gap:3px;font-size:8px;color:var(--muted);"><div style="width:10px;height:2px;background:var(--acc);"></div>P\u0159\u00edjem</div>';
+    html+='<div style="display:flex;align-items:center;gap:3px;font-size:8px;color:var(--muted);"><div style="width:10px;height:2px;background:var(--acc2);"></div>V\u00fddej</div>';
+    html+='</div>';
+    html+='<svg viewBox="0 0 300 65" style="width:100%;height:55px;" preserveAspectRatio="none">';
+    if(pathI)html+='<path d="'+pathI+'" fill="none" stroke="var(--acc)" stroke-width="1.5" opacity=".8"/>';
+    if(pathO)html+='<path d="'+pathO+'" fill="none" stroke="var(--acc2)" stroke-width="1.5" opacity=".8"/>';
+    html+='</svg></div>';
+  }
+  html+='<div class="card" style="padding:0;overflow:hidden;">';
+  html+='<div class="cgrid-8 chdr8">';
   for(var i=0;i<DAYS.length;i++)html+='<div>'+DAYS[i]+'</div>';
-  html+='<div class="wkcol" style="padding:4px 1px;text-align:center;font-size:7px;font-weight:700;">Týden</div>'
-    +'</div>'
-    +'<div class="cgrid-8" style="border-left:1px solid var(--border);">'+calRows+'</div>'
-    +'</div>';
+  html+='<div class="wkcol" style="padding:4px 1px;text-align:center;font-size:6px;font-weight:700;line-height:1.3;">\u03a3<br>\u0394kg</div>';
+  html+='</div>';
+  html+='<div class="cgrid-8" style="border-left:1px solid var(--border);">'+calRows+'</div>';
+  html+='</div>';
+  html+=summaryHtml;
   return html;
 }
+
 function bNutr(m){
   var data=getN(m);
   function rr(el){clearTimeout(el._t);el._t=setTimeout(function(){render();},900);}
@@ -610,6 +826,15 @@ function bNutr(m){
 // ── BODY ──
 function rBody(m){
   var metrics=getM(m),defs=getDefs(),ss2=getSuns(m);
+
+  // Zajisti existenci řádku % Svalů (muscle) v definicích pokud chybí
+  var hasMuscle=false;
+  for(var di=0;di<defs.length;di++){if(defs[di].id==='muscle'){hasMuscle=true;break;}}
+  if(!hasMuscle&&defs.length<6){
+    defs.push({id:'muscle',label:'% Svalů',color:COLORS[4]});
+    setDefs(defs);
+  }
+
   var lat={};
   for(var di=0;di<defs.length;di++){
     for(var i=4;i>=0;i--){
@@ -617,6 +842,69 @@ function rBody(m){
       if(!isNaN(v)){lat[defs[di].id]=v;break;}
     }
   }
+
+  // Výpočty BMR / TDEE / predikce
+  var latW=lat['weight']||NaN;
+  var latF=lat['fat']||NaN;
+  var latM=lat['muscle']||NaN;
+  var calcHtml='';
+  if(!isNaN(latW)&&!isNaN(latF)){
+    var leanMass=latW*(1-latF/100);
+    // Katch-McArdle BMR (z lean body mass)
+    var bmr=Math.round(370+21.6*leanMass);
+    // Průměrný výdej z nutrition dat aktuálního měsíce
+    var nutrData=getN(m),sumO=0,cntO=0;
+    var dim2=daysIn(m);
+    for(var d=0;d<dim2;d++){
+      var vo=parseInt(nutrData[d]?nutrData[d].kcalOut:'');
+      if(!isNaN(vo)&&vo>0){sumO+=vo;cntO++;}
+    }
+    var avgOut=cntO?Math.round(sumO/cntO):0;
+    // Průměrný příjem
+    var sumI=0,cntI=0;
+    for(var d=0;d<dim2;d++){
+      var vi=parseInt(nutrData[d]?nutrData[d].kcalIn:'');
+      if(!isNaN(vi)&&vi>0){sumI+=vi;cntI++;}
+    }
+    var avgIn=cntI?Math.round(sumI/cntI):0;
+    var avgDef=avgIn&&avgOut?avgIn-avgOut:0;
+    // Odhad týdnů do cíle (79 kg při 7700 kcal/kg)
+    var goalW=79.0,weeksEst='';
+    if(avgDef<0&&latW>goalW){
+      var kgLeft=latW-goalW;
+      var kcalLeft=kgLeft*7700;
+      var daysEst=Math.round(kcalLeft/Math.abs(avgDef));
+      weeksEst=Math.round(daysEst/7);
+    }
+    calcHtml='<div class="card"><div class="card-title">Analýza & predikce</div>'
+      +'<div class="body-info-row">'
+      +'<span class="body-info-lbl">Lean mass (bez tuku)</span>'
+      +'<span class="body-info-val">'+leanMass.toFixed(1)+' <span style="font-size:7px;color:var(--muted);">kg</span></span>'
+      +'</div>'
+      +'<div class="body-info-row">'
+      +'<span class="body-info-lbl">BMR (Katch-McArdle)</span>'
+      +'<span class="body-info-val acc">'+bmr+' <span style="font-size:7px;color:var(--muted);">kcal</span></span>'
+      +'</div>'
+      +(avgOut?'<div class="body-info-row">'
+        +'<span class="body-info-lbl">Ø výdej ('+m+'. měsíc, Garmin)</span>'
+        +'<span class="body-info-val acc2">'+avgOut+' <span style="font-size:7px;color:var(--muted);">kcal</span></span>'
+        +'</div>':'')
+      +(avgIn?'<div class="body-info-row">'
+        +'<span class="body-info-lbl">Ø příjem ('+m+'. měsíc)</span>'
+        +'<span class="body-info-val" style="color:'+(avgIn<avgOut?'var(--acc)':'var(--red)')+'">'+avgIn+' <span style="font-size:7px;color:var(--muted);">kcal</span></span>'
+        +'</div>':'')
+      +(avgDef&&avgIn&&avgOut?'<div class="body-info-row">'
+        +'<span class="body-info-lbl">Ø denní deficit</span>'
+        +'<span class="body-info-val" style="color:'+(avgDef<0?'var(--acc)':'var(--red)')+';">'+(avgDef<0?'':'+')+avgDef+' <span style="font-size:7px;color:var(--muted);">kcal</span></span>'
+        +'</div>':'')
+      +(weeksEst?'<div class="body-info-row" style="border-top:1px solid #FFD70044;margin-top:4px;padding-top:6px;">'
+        +'<span class="body-info-lbl" style="color:#FFD700;">🎯 Odhad do 79 kg</span>'
+        +'<span class="body-info-val" style="color:#FFD700;">~'+weeksEst+' <span style="font-size:7px;font-weight:400;">týdnů</span></span>'
+        +'</div>':'')
+      +(avgDef>=0&&avgIn&&avgOut?'<div style="font-size:8px;color:var(--red);margin-top:4px;">⚠ Aktuálně nejsi v deficitu</div>':'')
+      +'</div>';
+  }
+
   var ranges={weight:{min:60,max:120,norm:[70,95]},waist:{min:60,max:110,norm:[70,88]},muscle:{min:25,max:55,norm:[36,46]},fat:{min:4,max:32,norm:[10,18]}};
   var bars='';
   for(var di=0;di<defs.length;di++){
@@ -651,7 +939,20 @@ function rBody(m){
       +'</div></td>';
     for(var i=0;i<5;i++){
       var val=metrics[i]?metrics[i][def.id]||'':'';
-      tableRows+='<td><input class="mval fi" data-id="'+def.id+'" data-i="'+i+'" type="number" placeholder="—" value="'+val+'" style="color:'+def.color+';font-size:9px;font-weight:700;text-align:center;"></td>';
+      // Předvyplnění % Svalů: pokud je zadána váha a tuk, odhadni lean %
+      var placeholder='—';
+      if(!val&&def.id==='muscle'&&metrics[i]){
+        var pw=parseFloat(metrics[i]['weight']||'');
+        var pf=parseFloat(metrics[i]['fat']||'');
+        if(!isNaN(pw)&&!isNaN(pf)){
+          // Odhadni % svalů jako (lean_mass / weight * 0.5) — přibližně
+          // Lean mass = váha * (1-fat/100), svalová hmota ~50% lean
+          var lm=pw*(1-pf/100);
+          var est=Math.round(lm/pw*50*10)/10;
+          placeholder=est+'?';
+        }
+      }
+      tableRows+='<td><input class="mval fi" data-id="'+def.id+'" data-i="'+i+'" type="number" placeholder="'+placeholder+'" value="'+val+'" style="color:'+def.color+';font-size:9px;font-weight:700;text-align:center;"></td>';
     }
     tableRows+='</tr>';
   }
@@ -659,7 +960,8 @@ function rBody(m){
   for(var i=0;i<5;i++){
     var s=ss2[i];sunHdrs+=s?'<th>'+s.getDate()+'.'+(s.getMonth()+1)+'.</th>':'<th>—</th>';
   }
-  var html=(bars?'<div class="card"><div class="card-title">Aktuální hodnoty</div>'+bars+'</div>':'<div class="card"><div style="color:var(--muted);font-size:11px;text-align:center;padding:8px;">Zatím žádná data — zadej první měření níže</div></div>');
+  var html=calcHtml;
+  html+=(bars?'<div class="card"><div class="card-title">Aktuální hodnoty</div>'+bars+'</div>':'<div class="card"><div style="color:var(--muted);font-size:11px;text-align:center;padding:8px;">Zatím žádná data — zadej první měření níže</div></div>');
   if(lines)html+='<div class="card"><div class="card-title">Vývoj v měsíci</div><svg viewBox="0 0 300 75" style="width:100%;height:70px;" preserveAspectRatio="none">'+lines+'</svg></div>';
   html+='<div class="card" style="padding:0;overflow:hidden;">'
     +'<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px;background:var(--bg3);border-bottom:1px solid var(--border);">'
@@ -750,87 +1052,336 @@ function bCal(m){
   }
 }
 
+// ── Pomocník: načti první a poslední body metriky v měsíci ──
+function getMetricFirstLast(monthIdx, metricId){
+  var metrics=getM(monthIdx);
+  var first=NaN,last=NaN;
+  for(var i=0;i<5;i++){
+    var v=parseFloat(metrics[i]?metrics[i][metricId]:NaN);
+    if(!isNaN(v)){if(isNaN(first))first=v;last=v;}
+  }
+  return {first:first,last:last};
+}
+
+// Generuje delta string + CSS třídu
+// pro váhu a tuk: pokles = dobrý (acc/green), nárůst = špatný (red/acc2)
+// pro svaly: nárůst = dobrý, pokles = špatný
+function deltaHtml(val, unit, lowerIsBetter){
+  if(isNaN(val))return '<span class="ym-delta neu">—</span>';
+  var sign=val>0?'+':'';
+  var cls='neu';
+  if(val!==0){
+    if(lowerIsBetter){cls=val<0?'neg':'pos';}
+    else{cls=val>0?'neg':'pos';}
+  }
+  // neg = červeně (špatný směr) ale pro váhu/tuk záporné = dobré
+  // Přehodíme logiku: lowerIsBetter → záporný = dobrý (acc/green tón)
+  // V CSS: neg = acc (zelená), pos = acc2 (modrá/červená pro tuk/váhu)
+  // Pro váhu/tuk: záporné delta = dobrý → cls='neg' = var(--acc) = zelená ✓
+  // Pro svaly: kladné delta = dobrý → cls='neg' = var(--acc) ale to je špatně
+  // Přeuveď logiku:
+  var goodCls, badCls;
+  if(lowerIsBetter){goodCls=val<0?'neg':'pos';}
+  else{goodCls=val>0?'neg':'pos';}
+  return '<span class="ym-delta '+goodCls+'">'+sign+val.toFixed(1)+'<span style="font-size:7px;font-weight:400;"> '+unit+'</span></span>';
+}
+
+// ── Lineární regrese (least squares) ──
+function linReg(pts){
+  var n=pts.length;
+  if(n<2)return null;
+  var sx=0,sy=0,sxy=0,sxx=0;
+  for(var i=0;i<n;i++){sx+=pts[i].x;sy+=pts[i].y;sxy+=pts[i].x*pts[i].y;sxx+=pts[i].x*pts[i].x;}
+  var denom=n*sxx-sx*sx;
+  if(!denom)return null;
+  var slope=(n*sxy-sx*sy)/denom;
+  var intercept=(sy-slope*sx)/n;
+  return {slope:slope,intercept:intercept};
+}
+
+// ── Klouzavý průměr ──
+function movingAvg(pts,window){
+  var out=[];
+  for(var i=0;i<pts.length;i++){
+    var sum=0,cnt=0;
+    for(var j=0;j<pts.length;j++){
+      if(pts[j].x>=pts[i].x-window&&pts[j].x<=pts[i].x){sum+=pts[j].y;cnt++;}
+    }
+    if(cnt>0)out.push({x:pts[i].x,y:sum/cnt});
+  }
+  return out;
+}
+
 // ── YEARLY ──
 function rYear(){
-  var defs=getDefs(),lastM=0;
+  var defs=getDefs();
+  var weightId='weight',fatId='fat',muscleId='muscle';
+  for(var di=0;di<defs.length;di++){
+    var d=defs[di];
+    if(d.id==='weight'||d.label.indexOf('Váha')>=0)weightId=d.id;
+    if(d.id==='fat'||d.label.indexOf('Tuk')>=0||d.label.indexOf('tuk')>=0)fatId=d.id;
+    if(d.id==='muscle'||d.label.indexOf('Sval')>=0||d.label.indexOf('sval')>=0||d.label.indexOf('muscle')>=0)muscleId=d.id;
+  }
+
+  var lastM=0;
   var all=[];
   for(var i=0;i<MONTHS.length;i++){all.push({n:getN(i),h:getD(i),m:getM(i)});}
   for(var i=0;i<all.length;i++){
     if(Object.keys(all[i].n).length+Object.keys(all[i].h).length+Object.keys(all[i].m).length>0)lastM=i;
   }
-  var dayCount=0,maxK=2500,pI=[],pO=[],pW=[],wVals=[];
-  for(var idx=0;idx<=lastM;idx++){
+
+  var fm=Math.max(0,Math.min(YF.fromMonth,lastM));
+  var tm=Math.max(fm,Math.min(YF.toMonth,lastM));
+
+  var dayCount=0,maxK=2500;
+  var pI=[],pO=[],pW=[],wVals=[];
+  var baseOffset=0;
+  for(var idx=0;idx<fm;idx++)baseOffset+=daysIn(idx);
+
+  dayCount=0;
+  for(var idx=fm;idx<=tm;idx++){
     var md=all[idx],dim=daysIn(idx);
     for(var d=0;d<dim;d++){
       var vI=parseInt(md.n[d]?md.n[d].kcalIn:''),vO=parseInt(md.n[d]?md.n[d].kcalOut:'');
-      if(!isNaN(vI)){pI.push({x:dayCount+d,y:vI});if(vI>maxK)maxK=vI;}
-      if(!isNaN(vO)){pO.push({x:dayCount+d,y:vO});if(vO>maxK)maxK=vO;}
+      if(!isNaN(vI)&&YF.showKcalIn){pI.push({x:dayCount+d,y:vI});if(vI>maxK)maxK=vI;}
+      if(!isNaN(vO)&&YF.showKcalOut){pO.push({x:dayCount+d,y:vO});if(vO>maxK)maxK=vO;}
     }
     var sd=new Date(YEAR,idx,1);sd.setDate(sd.getDate()+(sd.getDay()===0?0:7-sd.getDay()));var wi=0;
     while(sd.getMonth()===idx){
-      var w=parseFloat(md.m[wi]?md.m[wi][defs[0]?defs[0].id:'weight']:NaN);
-      if(!isNaN(w)){pW.push({x:dayCount+sd.getDate()-1,y:w});wVals.push(w);}
+      var w=parseFloat(md.m[wi]?md.m[wi][weightId]:NaN);
+      if(!isNaN(w)&&YF.showWeight){pW.push({x:dayCount+sd.getDate()-1,y:w});wVals.push(w);}
       sd.setDate(sd.getDate()+7);wi++;
     }
     dayCount+=dim;
   }
   maxK*=1.1;
+
+  // Klouzavý průměr váhy
+  var pMA7=YF.showMA7&&pW.length>=2?movingAvg(pW,7):[];
+  var pMA14=YF.showMA14&&pW.length>=2?movingAvg(pW,14):[];
+
+  // Lineární regrese váhy → predikce
+  var reg=YF.showPred&&pW.length>=3?linReg(pW):null;
+  var predPath='',predLabel='',predDaysLeft=0;
+  var predInfo='';
+  if(reg){
+    var goalW=YF.goalWeight||79.0;
+    // x kde y=goalW: x=(goalW-intercept)/slope
+    if(reg.slope<0){
+      var xGoal=(goalW-reg.intercept)/reg.slope;
+      predDaysLeft=Math.max(0,Math.round(xGoal-dayCount));
+      // Nakresli regresní linii přes celý rozsah + trochu dopředu
+      var xEnd=Math.min(dayCount+90,dayCount+predDaysLeft+30);
+      var xStart=pW[0].x;
+      var y0=reg.slope*xStart+reg.intercept;
+      var y1=reg.slope*xEnd+reg.intercept;
+      // Akumuluj do minW/maxW pro správné měřítko
+      if(y1<(wVals.length?Math.min.apply(null,wVals):80))wVals.push(y1);
+      predPath='pred_'+xStart+'_'+y0+'_'+xEnd+'_'+y1;
+      // Datum dosažení cíle
+      var now2=new Date();
+      var goalDate=new Date(now2.getTime()+predDaysLeft*86400000);
+      predInfo='Při aktuálním tempu '+goalW+' kg: '+(predDaysLeft>0?'~'+Math.round(predDaysLeft/7)+' týdnů ('+goalDate.toLocaleDateString('cs-CZ',{month:'short',day:'numeric'})+')':'dosaženo!');
+    } else {
+      predInfo='Trend váhy nestoupá — predikce není k dispozici';
+    }
+  }
+
   var minW=wVals.length?Math.min.apply(null,wVals)*.97:50;
   var maxW=wVals.length?Math.max.apply(null,wVals)*1.03:100;
   var rW=maxW-minW||1;
   var W=300,H=100,sx=W/(dayCount||1);
+  function fyW(y){return H-((y-minW)/rW)*H;}
   function mp(pts,fy){if(!pts.length)return '';var s='';for(var i=0;i<pts.length;i++)s+=(i===0?'M':'L')+' '+(pts[i].x*sx).toFixed(1)+' '+fy(pts[i].y).toFixed(1)+' ';return s;}
   var pathI=mp(pI,function(y){return H-(y/maxK)*H;});
   var pathO=mp(pO,function(y){return H-(y/maxK)*H;});
-  var pathW=mp(pW,function(y){return H-((y-minW)/rW)*H;});
-  var wc=defs[0]?defs[0].color:COLORS[0];
+  var pathW=mp(pW,fyW);
+  var pathMA7=mp(pMA7,fyW);
+  var pathMA14=mp(pMA14,fyW);
 
-  var wDots='';
-  for(var i=0;i<pW.length;i++){
-    var cx=(pW[i].x*sx).toFixed(1),cy=(H-((pW[i].y-minW)/rW)*H).toFixed(1);
-    wDots+='<circle cx="'+cx+'" cy="'+cy+'" r="3" fill="var(--bg)" stroke="'+wc+'" stroke-width="1.5"/>';
-    wDots+='<text x="'+cx+'" y="'+(H-((pW[i].y-minW)/rW)*H-8).toFixed(1)+'" text-anchor="middle" font-size="6" fill="'+wc+'" font-weight="700">'+pW[i].y+'</text>';
+  var wc=defs[0]?defs[0].color:COLORS[0];
+  for(var di=0;di<defs.length;di++){if(defs[di].id===weightId){wc=defs[di].color;break;}}
+
+  // Sestavení predikční linie ze zakódovaných dat
+  var predSvg='';
+  if(predPath&&reg){
+    var pp=predPath.split('_');
+    var px0=(+pp[1])*sx,py0=fyW(+pp[2]),px1=(+pp[3])*sx,py1=fyW(+pp[4]);
+    // Cílová čára (horizontální)
+    var goalY=fyW(YF.goalWeight||79.0);
+    predSvg+='<line x1="0" y1="'+goalY.toFixed(1)+'" x2="'+W+'" y2="'+goalY.toFixed(1)+'" stroke="#FFD700" stroke-width=".5" stroke-dasharray="3,3" opacity=".4"/>';
+    predSvg+='<text x="2" y="'+(goalY-2).toFixed(1)+'" font-size="5" fill="#FFD700" opacity=".7">'+(YF.goalWeight||79)+' kg cíl</text>';
+    // Regresní linie
+    predSvg+='<line x1="'+px0.toFixed(1)+'" y1="'+py0.toFixed(1)+'" x2="'+px1.toFixed(1)+'" y2="'+py1.toFixed(1)+'" stroke="#FFD700" stroke-width="1.2" stroke-dasharray="4,3" opacity=".7"/>';
   }
 
-  var mCards='';
-  for(var i=0;i<MONTHS.length;i++){
-    var nd=getN(i),hd=getD(i),ha=getH(i),dim=daysIn(i);
-    var logged=0,hdn=0,htot=0;
-    for(var d=0;d<dim;d++)if(nd[d]&&(nd[d].kcalIn||nd[d].kcalOut))logged++;
-    for(var h=0;h<ha.length;h++){for(var d=0;d<dim;d++){htot++;if(hd[h+'-'+d]==='done')hdn++;}}
-    var has=logged>0||hdn>0,pct=htot?Math.round(hdn/htot*100):0;
-    mCards+='<div class="ymcard" style="border-color:'+(has?'var(--border)':'#111')+';">'
-      +'<div style="font-size:8px;font-weight:700;color:'+(has?'var(--acc)':'#252525')+';text-transform:uppercase;margin-bottom:3px;">'+MONTHS[i].slice(0,3)+'</div>'
-      +(has?'<div style="font-size:7px;color:var(--muted);">Kcal: <span style="color:#777">'+logged+'/'+dim+'d</span></div><div style="font-size:7px;color:var(--muted);">Návyky: <span style="color:var(--acc)">'+pct+'%</span></div>':'<div style="font-size:7px;color:#222;">—</div>')
-      +'</div>';
+  var wDots='';
+  if(YF.showWeight){
+    for(var i=0;i<pW.length;i++){
+      var cx=(pW[i].x*sx).toFixed(1),cy=fyW(pW[i].y).toFixed(1);
+      wDots+='<circle cx="'+cx+'" cy="'+cy+'" r="3" fill="var(--bg)" stroke="'+wc+'" stroke-width="1.5"/>';
+      wDots+='<text x="'+cx+'" y="'+(fyW(pW[i].y)-8).toFixed(1)+'" text-anchor="middle" font-size="6" fill="'+wc+'" font-weight="700">'+pW[i].y+'</text>';
+    }
   }
 
   var mLabels='';
-  for(var i=0;i<=lastM;i++)mLabels+='<div style="flex:1;text-align:center;font-size:5px;color:#2a2a2a;text-transform:uppercase;">'+MONTHS[i].slice(0,3)+'</div>';
+  for(var i=fm;i<=tm;i++)mLabels+='<div style="flex:1;text-align:center;font-size:5px;color:#2a2a2a;text-transform:uppercase;">'+MONTHS[i].slice(0,3)+'</div>';
+
+  // ── Filtrační panel ──
+  var filterHtml='<div class="card" style="padding:10px;">'
+    +'<div class="card-title">Filtry</div>'
+    +'<div class="yr-section">'
+    +'<div class="yr-section-title">Zobrazit grafy</div>'
+    +'<div class="yr-filter">'
+    +'<button class="yr-chip'+(YF.showKcalIn?' on':'')+'" id="yf-in">Příjem</button>'
+    +'<button class="yr-chip'+(YF.showKcalOut?' on2':'')+'" id="yf-out">Výdej</button>'
+    +'<button class="yr-chip'+(YF.showWeight?' on':'')+'" id="yf-wt">Váha</button>'
+    +'<button class="yr-ma-chip'+(YF.showMA7?' on':'')+'" id="yf-ma7">MA 7d</button>'
+    +'<button class="yr-ma-chip'+(YF.showMA14?' on':'')+'" id="yf-ma14">MA 14d</button>'
+    +'<button class="yr-ma-chip'+(YF.showPred?' on':'')+'" id="yf-pred">Predikce</button>'
+    +'</div>'
+    +(YF.showPred?'<div style="display:flex;align-items:center;gap:6px;margin-top:5px;">'
+      +'<span style="font-size:8px;color:#996600;">Cíl:</span>'
+      +'<input id="yf-goal" type="number" value="'+(YF.goalWeight||79)+'" style="background:var(--bg);border:1px solid #FFD70044;border-radius:3px;color:#FFD700;font-size:9px;font-weight:700;width:52px;padding:2px 4px;outline:none;">'
+      +'<span style="font-size:8px;color:#996600;">kg</span>'
+      +(predInfo?'<span style="font-size:7px;color:#FFD700;margin-left:4px;">'+predInfo+'</span>':'')
+      +'</div>':'')
+    +'</div>'
+    +'<div class="yr-section">'
+    +'<div class="yr-section-title">Období</div>'
+    +'<div style="display:flex;gap:5px;margin-bottom:5px;align-items:center;">'
+    +'<span style="font-size:8px;color:var(--muted);min-width:20px;">Od</span>'
+    +'<div class="yr-filter" style="margin:0;flex-wrap:nowrap;overflow-x:auto;">';
+  for(var i=0;i<=lastM;i++){
+    filterHtml+='<button class="yr-chip'+(YF.fromMonth===i?' on':'')+' yf-from" data-m="'+i+'">'+MONTHS[i].slice(0,3)+'</button>';
+  }
+  filterHtml+='</div></div>'
+    +'<div style="display:flex;gap:5px;align-items:center;">'
+    +'<span style="font-size:8px;color:var(--muted);min-width:20px;">Do</span>'
+    +'<div class="yr-filter" style="margin:0;flex-wrap:nowrap;overflow-x:auto;">';
+  for(var i=0;i<=lastM;i++){
+    filterHtml+='<button class="yr-chip'+(YF.toMonth===i?' on':'')+' yf-to" data-m="'+i+'">'+MONTHS[i].slice(0,3)+'</button>';
+  }
+  filterHtml+='</div></div>'
+    +'</div>'
+    +'</div>';
+
+  // ── Graf ──
+  var hasData=(pathI||pathO||pathW||pathMA7||pathMA14);
+  var legendHtml='<div style="display:flex;gap:8px;margin-bottom:6px;flex-wrap:wrap;">';
+  if(YF.showKcalIn)legendHtml+='<div style="display:flex;align-items:center;gap:3px;font-size:8px;color:var(--muted);"><div style="width:10px;height:2px;background:var(--acc);opacity:.6;"></div>Příjem</div>';
+  if(YF.showKcalOut)legendHtml+='<div style="display:flex;align-items:center;gap:3px;font-size:8px;color:var(--muted);"><div style="width:10px;height:2px;background:var(--acc2);opacity:.6;"></div>Výdej</div>';
+  if(YF.showWeight)legendHtml+='<div style="display:flex;align-items:center;gap:3px;font-size:8px;color:var(--muted);"><div style="width:7px;height:7px;border-radius:50%;background:'+wc+';"></div>Váha</div>';
+  if(YF.showMA7)legendHtml+='<div style="display:flex;align-items:center;gap:3px;font-size:8px;color:var(--muted);"><div style="width:10px;height:2px;background:#FFD700;"></div>MA 7d</div>';
+  if(YF.showMA14)legendHtml+='<div style="display:flex;align-items:center;gap:3px;font-size:8px;color:var(--muted);"><div style="width:10px;height:2px;background:#FF9500;"></div>MA 14d</div>';
+  if(YF.showPred)legendHtml+='<div style="display:flex;align-items:center;gap:3px;font-size:8px;color:var(--muted);"><div style="width:10px;height:2px;background:#FFD700;border-top:1px dashed #FFD700;"></div>Trend</div>';
+  legendHtml+='</div>';
+
+  var chartHtml='<div class="card"><div class="card-title">Metabolický vývoj '
+    +MONTHS[fm].slice(0,3)+' – '+MONTHS[tm].slice(0,3)+' '+YEAR+'</div>'
+    +legendHtml
+    +(hasData
+      ?'<svg viewBox="0 0 300 100" style="width:100%;height:85px;" preserveAspectRatio="none">'
+        +predSvg
+        +(pathI?'<path d="'+pathI+'" fill="none" stroke="var(--acc)" stroke-width="1" opacity=".5"/>':'')
+        +(pathO?'<path d="'+pathO+'" fill="none" stroke="var(--acc2)" stroke-width="1" opacity=".5"/>':'')
+        +(pathW?'<path d="'+pathW+'" fill="none" stroke="'+wc+'" stroke-width="2"/>':'')
+        +(pathMA7?'<path d="'+pathMA7+'" fill="none" stroke="#FFD700" stroke-width="1.8" opacity=".9"/>':'')
+        +(pathMA14?'<path d="'+pathMA14+'" fill="none" stroke="#FF9500" stroke-width="1.8" opacity=".9"/>':'')
+        +wDots
+        +'</svg>'
+        +'<div style="display:flex;margin-top:3px;">'+mLabels+'</div>'
+      :'<div style="color:var(--muted);font-size:10px;text-align:center;padding:10px;">Žádná data pro vybrané grafy a období</div>')
+    +'</div>';
+
+  // ── Přehled po měsících ──
+  var mCards='';
+  for(var i=0;i<MONTHS.length;i++){
+    var bodyData=getM(i);
+    var hasAny=Object.keys(bodyData).length>0||Object.keys(getN(i)).length>0||Object.keys(getD(i)).length>0;
+    var wFL=getMetricFirstLast(i,weightId);
+    var fFL=getMetricFirstLast(i,fatId);
+    var mFL=getMetricFirstLast(i,muscleId);
+    var dW=(!isNaN(wFL.first)&&!isNaN(wFL.last))?+(wFL.last-wFL.first).toFixed(1):NaN;
+    var dF=(!isNaN(fFL.first)&&!isNaN(fFL.last))?+(fFL.last-fFL.first).toFixed(1):NaN;
+    var dM=(!isNaN(mFL.first)&&!isNaN(mFL.last))?+(mFL.last-mFL.first).toFixed(1):NaN;
+    var hasBodyDelta=!isNaN(dW)||!isNaN(dF)||!isNaN(dM);
+    mCards+='<div class="ymcard" style="border-color:'+(hasAny?'var(--border)':'#111')+';">'
+      +'<div style="font-size:8px;font-weight:700;color:'+(hasAny?'var(--acc)':'#252525')+';text-transform:uppercase;margin-bottom:4px;">'+MONTHS[i].slice(0,3)+'</div>';
+    if(!hasAny){
+      mCards+='<div style="font-size:7px;color:#222;">—</div>';
+    } else if(hasBodyDelta){
+      mCards+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">'
+        +'<span style="font-size:7px;color:var(--muted);">Váha</span>'+deltaHtml(dW,'kg',true)+'</div>';
+      mCards+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">'
+        +'<span style="font-size:7px;color:var(--muted);">% Tuk</span>'+deltaHtml(dF,'%',true)+'</div>';
+      mCards+='<div style="display:flex;justify-content:space-between;align-items:center;">'
+        +'<span style="font-size:7px;color:var(--muted);">% Svaly</span>'+deltaHtml(dM,'%',false)+'</div>';
+    } else {
+      mCards+='<div style="font-size:7px;color:var(--muted);">Bez těl. měř.</div>';
+    }
+    mCards+='</div>';
+  }
 
   return '<div class="sgrid" style="margin-bottom:10px;">'
     +'<button class="btn btn-acc btn-full" style="margin:0;" onclick="doExport()">💾 Export dat</button>'
     +'<label class="btn btn-full" style="cursor:pointer;justify-content:center;margin:0;">📂 Import zálohy<input type="file" accept=".json" style="display:none;" onchange="doImport(this.files[0])"></label>'
     +'</div>'
-    +'<div class="card"><div class="card-title">Metabolický vývoj '+YEAR+'</div>'
-    +'<div style="display:flex;gap:8px;margin-bottom:6px;">'
-    +'<div style="display:flex;align-items:center;gap:3px;font-size:8px;color:var(--muted);"><div style="width:10px;height:2px;background:var(--acc);opacity:.6;"></div>Příjem</div>'
-    +'<div style="display:flex;align-items:center;gap:3px;font-size:8px;color:var(--muted);"><div style="width:10px;height:2px;background:var(--acc2);opacity:.6;"></div>Výdej</div>'
-    +'<div style="display:flex;align-items:center;gap:3px;font-size:8px;color:var(--muted);"><div style="width:7px;height:7px;border-radius:50%;background:'+wc+';"></div>Váha</div>'
-    +'</div>'
-    +'<svg viewBox="0 0 300 100" style="width:100%;height:85px;" preserveAspectRatio="none">'
-    +(pathI?'<path d="'+pathI+'" fill="none" stroke="var(--acc)" stroke-width="1" opacity=".5"/>':'')
-    +(pathO?'<path d="'+pathO+'" fill="none" stroke="var(--acc2)" stroke-width="1" opacity=".5"/>':'')
-    +(pathW?'<path d="'+pathW+'" fill="none" stroke="'+wc+'" stroke-width="2.5"/>':'')
-    +wDots
-    +'</svg>'
-    +'<div style="display:flex;margin-top:3px;">'+mLabels+'</div>'
-    +'</div>'
-    +'<div class="card"><div class="card-title">Přehled po měsících</div><div class="ymgrid">'+mCards+'</div></div>';
+    +filterHtml
+    +chartHtml
+    +'<div class="card"><div class="card-title">Přehled po měsících — změny těl. kompozice</div>'
+    +'<div style="font-size:7px;color:var(--muted);margin-bottom:6px;">Δ = rozdíl první a poslední měření v měsíci. '
+    +'<span style="color:var(--acc);">■</span> dobrý směr &nbsp;'
+    +'<span style="color:var(--acc2);">■</span> špatný směr</div>'
+    +'<div class="ymgrid">'+mCards+'</div></div>';
+}
+
+function bYear(){
+  var yfIn=document.getElementById('yf-in');
+  if(yfIn)yfIn.addEventListener('click',function(){YF.showKcalIn=!YF.showKcalIn;render();});
+  var yfOut=document.getElementById('yf-out');
+  if(yfOut)yfOut.addEventListener('click',function(){YF.showKcalOut=!YF.showKcalOut;render();});
+  var yfWt=document.getElementById('yf-wt');
+  if(yfWt)yfWt.addEventListener('click',function(){YF.showWeight=!YF.showWeight;render();});
+  var yfMa7=document.getElementById('yf-ma7');
+  if(yfMa7)yfMa7.addEventListener('click',function(){YF.showMA7=!YF.showMA7;render();});
+  var yfMa14=document.getElementById('yf-ma14');
+  if(yfMa14)yfMa14.addEventListener('click',function(){YF.showMA14=!YF.showMA14;render();});
+  var yfPred=document.getElementById('yf-pred');
+  if(yfPred)yfPred.addEventListener('click',function(){YF.showPred=!YF.showPred;render();});
+  // Cílová váha pro predikci
+  var yfGoal=document.getElementById('yf-goal');
+  if(yfGoal){
+    yfGoal.addEventListener('change',function(){
+      var v=parseFloat(this.value);
+      if(!isNaN(v)&&v>40&&v<200){YF.goalWeight=v;render();}
+    });
+    // Zabráníme automatickému re-renderu při psaní
+    yfGoal.addEventListener('click',function(e){e.stopPropagation();});
+  }
+  var froms=document.querySelectorAll('.yf-from');
+  for(var i=0;i<froms.length;i++){
+    froms[i].addEventListener('click',function(){
+      var m=+this.dataset.m;
+      YF.fromMonth=m;
+      if(YF.toMonth<m)YF.toMonth=m;
+      render();
+    });
+  }
+  var tos=document.querySelectorAll('.yf-to');
+  for(var i=0;i<tos.length;i++){
+    tos[i].addEventListener('click',function(){
+      var m=+this.dataset.m;
+      YF.toMonth=m;
+      if(YF.fromMonth>m)YF.fromMonth=m;
+      render();
+    });
+  }
 }
 
 // INIT
 function init(){
+  bindKbHide();
   buildMnav();updateBUI();autoBackup();
   document.getElementById('mname').textContent=MONTHS[S.month];
   setTimeout(function(){var a=document.querySelector('.mbtn.on');if(a)a.scrollIntoView({inline:'center',behavior:'smooth'});},100);
