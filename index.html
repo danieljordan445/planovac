@@ -95,7 +95,21 @@ input[type=number]{-moz-appearance:textfield;}
 /* Rok — klouzavý průměr a predikce přepínače */
 .yr-ma-chip{background:var(--bg3);border:1px solid #FFD70066;border-radius:4px;padding:3px 8px;cursor:pointer;color:#996600;font-size:8px;font-weight:700;text-transform:uppercase;white-space:nowrap;}
 .yr-ma-chip.on{background:#332200;color:#FFD700;border-color:#FFD700;}
-/* Tělo — info box */
+/* InBody sekce */
+.ib-wrap{display:flex;gap:8px;align-items:stretch;}
+.ib-silhouette{flex-shrink:0;width:90px;}
+.ib-charts{flex:1;display:flex;flex-direction:column;gap:4px;}
+.ib-minichart{background:var(--bg3);border-radius:4px;padding:4px 6px;}
+.ib-minichart-lbl{font-size:6px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:1px;display:flex;justify-content:space-between;}
+.ib-minichart-val{font-size:11px;font-weight:700;line-height:1;}
+.ib-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:8px;}
+.ib-inp-wrap{background:var(--bg3);border-radius:5px;padding:5px 7px;}
+.ib-inp-lbl{font-size:7px;color:var(--muted);margin-bottom:2px;}
+.ib-inp{background:transparent;border:none;outline:none;color:var(--text);font-size:11px;font-weight:700;width:100%;font-family:var(--font);}
+.ib-rec{display:flex;align-items:center;justify-content:space-between;padding:5px 8px;border-bottom:1px solid var(--border);font-size:8px;}
+.ib-rec:last-child{border-bottom:none;}
+.ib-score{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;flex-shrink:0;}
+</style>
 .body-info-row{display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);}
 .body-info-row:last-child{border-bottom:none;}
 .body-info-lbl{font-size:8px;color:var(--muted);}
@@ -189,6 +203,23 @@ function kN(m){return 'habit_tracker_nutrition_data_'+m;}
 function kM(m){return 'habit_tracker_body_metrics_v2_'+m;}
 function kF(m){return 'habit_tracker_weekly_focus_v3_'+m;}
 var KDEFS='habit_tracker_metric_definitions';
+var KINBODY='habit_tracker_inbody_records';
+
+function getInBody(){return sg(KINBODY,[]);}
+function setInBody(v){ss(KINBODY,v);}
+// Předvyplň historická data z obrázků pokud ještě nejsou
+function initInBodyDefaults(){
+  var recs=getInBody();
+  if(recs.length===0){
+    recs=[
+      {date:'2025-01-16',weight:91.8,fat:18.4,fatKg:16.9,smm:42.9,bmi:27.7,score:89,bmr:1988,water:54.9},
+      {date:'2025-05-23',weight:85.8,fat:15.0,fatKg:12.9,smm:42.0,bmi:25.9,score:91,bmr:1946,water:53.5},
+      {date:'2025-12-31',weight:88.5,fat:17.4,fatKg:15.4,smm:42.0,bmi:26.7,score:89,bmr:1949,water:53.6},
+      {date:'2026-04-03',weight:81.5,fat:11.8,fatKg:9.6,smm:41.2,bmi:24.6,score:90,bmr:1923,water:52.8}
+    ];
+    setInBody(recs);
+  }
+}
 
 function getH(m){return sg(kH(m),['Vitaminy','Kreatin','Protein']);}
 function setH(m,v){ss(kH(m),v);}
@@ -372,7 +403,7 @@ function render(){
   var c=document.getElementById('content'),m=S.month;
   if(S.tab==='habits'){c.innerHTML=rHabits(m);bHabits(m);}
   else if(S.tab==='nutrition'){c.innerHTML=rNutr(m);bNutr(m);}
-  else if(S.tab==='body'){c.innerHTML=rBody(m);bBody(m);}
+  else if(S.tab==='body'){c.innerHTML=rBody(m);bBody(m);bInBody();}
   else if(S.tab==='calendar'){c.innerHTML=rCal(m);bCal(m);}
   else if(S.tab==='yearly'){c.innerHTML=rYear();bYear();}
 }
@@ -824,6 +855,208 @@ function bNutr(m){
 }
 
 // ── BODY ──
+// ── INBODY PANEL ──
+function rInBody(){
+  var recs=getInBody();
+  // Seřadit podle data
+  recs.sort(function(a,b){return a.date>b.date?1:-1;});
+  var lat=recs.length?recs[recs.length-1]:{};
+  var prev=recs.length>1?recs[recs.length-2]:null;
+
+  // Funkce delta badge
+  function dBadge(cur,prv,lowerBetter){
+    if(!prv||isNaN(cur)||isNaN(prv))return '';
+    var d=(cur-prv);
+    if(Math.abs(d)<0.01)return '';
+    var good=(lowerBetter?d<0:d>0);
+    var col=good?'var(--acc)':'var(--red)';
+    return '<span style="font-size:7px;color:'+col+';margin-left:3px;">'+(d>0?'+':'')+d.toFixed(1)+'</span>';
+  }
+
+  // Mini-chart builder (sparkline SVG inline)
+  function spark(vals,color,W,H){
+    if(vals.length<2)return '';
+    var min=Math.min.apply(null,vals),max=Math.max.apply(null,vals),rng=max-min||1;
+    var sw=W/(vals.length-1);
+    var path='';
+    for(var i=0;i<vals.length;i++){
+      var x=(i*sw).toFixed(1),y=(H-((vals[i]-min)/rng)*(H-4)-2).toFixed(1);
+      path+=(i===0?'M':'L')+x+' '+y+' ';
+    }
+    // Poslední bod
+    var lx=((vals.length-1)*sw).toFixed(1),ly=(H-((vals[vals.length-1]-min)/rng)*(H-4)-2).toFixed(1);
+    return '<svg viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" style="overflow:visible;">'
+      +'<path d="'+path+'" fill="none" stroke="'+color+'" stroke-width="1.5" stroke-linejoin="round"/>'
+      +'<circle cx="'+lx+'" cy="'+ly+'" r="2.5" fill="'+color+'"/>'
+      +'</svg>';
+  }
+
+  var wVals=recs.map(function(r){return r.weight;});
+  var fVals=recs.map(function(r){return r.fat;});
+  var sVals=recs.map(function(r){return r.smm;});
+  var scVals=recs.map(function(r){return r.score;});
+
+  // Silueta SVG s barevnými zónami podle % tuku
+  // Barva tukové zóny: 0-10% zelená, 10-18% žlutozelená, 18-25% oranžová, 25%+ červená
+  function fatZoneColor(fatPct){
+    if(isNaN(fatPct))return '#333';
+    if(fatPct<=10)return '#4ADE80';
+    if(fatPct<=15)return '#CCFF00';
+    if(fatPct<=20)return '#FACC15';
+    if(fatPct<=25)return '#FB923C';
+    return '#FF3366';
+  }
+  // Barva svalové zóny: SMM/normál pro muže 182cm ~36-46kg
+  function smmZoneColor(smm){
+    if(isNaN(smm))return '#333';
+    if(smm>=44)return '#4ADE80';
+    if(smm>=40)return '#CCFF00';
+    if(smm>=36)return '#FACC15';
+    return '#FB923C';
+  }
+  var fatPct=lat.fat||NaN;
+  var smmKg=lat.smm||NaN;
+  var fc=fatZoneColor(fatPct);
+  var sc2=smmZoneColor(smmKg);
+  // Smíchej — trup a paže ukazují svaly, břicho tuk
+  var trunkC=sc2;     // trup — svaly
+  var bellyC=fc;      // břicho — tuk
+  var armC=sc2;       // paže — svaly
+  var legC=sc2;       // nohy — svaly
+
+  var silSvg='<svg viewBox="0 0 80 170" width="80" height="170" xmlns="http://www.w3.org/2000/svg">'
+    // Hlava
+    +'<ellipse cx="40" cy="14" rx="11" ry="13" fill="#1a1a1a" stroke="var(--muted)" stroke-width="1"/>'
+    // Krk
+    +'<rect x="35" y="25" width="10" height="8" rx="2" fill="#1a1a1a" stroke="var(--muted)" stroke-width=".5"/>'
+    // Trup horní (hrudník — svaly)
+    +'<rect x="22" y="32" width="36" height="28" rx="6" fill="'+trunkC+'" opacity=".25" stroke="'+trunkC+'" stroke-width="1"/>'
+    +'<text x="40" y="50" text-anchor="middle" font-size="7" fill="'+sc2+'" font-weight="700">'+(!isNaN(smmKg)?smmKg.toFixed(1)+' kg':'—')+'</text>'
+    // Trup dolní (břicho — tuk)
+    +'<rect x="24" y="59" width="32" height="22" rx="4" fill="'+bellyC+'" opacity=".22" stroke="'+bellyC+'" stroke-width="1"/>'
+    +'<text x="40" y="73" text-anchor="middle" font-size="6.5" fill="'+fc+'" font-weight="700">'+(!isNaN(fatPct)?fatPct.toFixed(1)+'%':'—')+'</text>'
+    // Levá paže
+    +'<rect x="5" y="32" width="15" height="42" rx="7" fill="'+armC+'" opacity=".22" stroke="'+armC+'" stroke-width="1"/>'
+    // Pravá paže
+    +'<rect x="60" y="32" width="15" height="42" rx="7" fill="'+armC+'" opacity=".22" stroke="'+armC+'" stroke-width="1"/>'
+    // Kyčle / spodek trupu
+    +'<rect x="22" y="80" width="36" height="14" rx="4" fill="'+bellyC+'" opacity=".15" stroke="'+bellyC+'" stroke-width=".5"/>'
+    // Levé stehno
+    +'<rect x="23" y="93" width="15" height="42" rx="7" fill="'+legC+'" opacity=".22" stroke="'+legC+'" stroke-width="1"/>'
+    // Pravé stehno
+    +'<rect x="42" y="93" width="15" height="42" rx="7" fill="'+legC+'" opacity=".22" stroke="'+legC+'" stroke-width="1"/>'
+    // Levé lýtko
+    +'<rect x="24" y="134" width="13" height="30" rx="6" fill="'+legC+'" opacity=".15" stroke="'+legC+'" stroke-width=".5"/>'
+    // Pravé lýtko
+    +'<rect x="43" y="134" width="13" height="30" rx="6" fill="'+legC+'" opacity=".15" stroke="'+legC+'" stroke-width=".5"/>'
+    // Obrys — čára celého těla
+    +'<text x="40" y="167" text-anchor="middle" font-size="5.5" fill="var(--muted)">'+(!isNaN(lat.weight)?lat.weight+' kg':'—')+'</text>'
+    +'</svg>';
+
+  // Mini-grafy — 4 řádky
+  var charts='';
+  var chartDefs=[
+    {label:'Váha',unit:'kg',vals:wVals,color:'#FF3366',lowerBetter:true,cur:lat.weight,prv:prev?prev.weight:NaN},
+    {label:'% Tuku',unit:'%',vals:fVals,color:'#A78BFA',lowerBetter:true,cur:lat.fat,prv:prev?prev.fat:NaN},
+    {label:'Svaly (SMM)',unit:'kg',vals:sVals,color:'#4ADE80',lowerBetter:false,cur:lat.smm,prv:prev?prev.smm:NaN},
+    {label:'InBody skóre',unit:'',vals:scVals,color:'#FFD700',lowerBetter:false,cur:lat.score,prv:prev?prev.score:NaN}
+  ];
+  for(var ci=0;ci<chartDefs.length;ci++){
+    var cd=chartDefs[ci];
+    var curStr=cd.cur!==undefined&&!isNaN(cd.cur)?cd.cur+(cd.unit?cd.unit:''):'—';
+    charts+='<div class="ib-minichart">'
+      +'<div class="ib-minichart-lbl">'
+        +'<span>'+cd.label+'</span>'
+        +'<span style="color:'+cd.color+';font-weight:700;">'+curStr+dBadge(cd.cur,cd.prv,cd.lowerBetter)+'</span>'
+      +'</div>'
+      +'<div style="display:flex;align-items:center;justify-content:flex-end;">'
+        +spark(cd.vals,cd.color,100,22)
+      +'</div>'
+      +'</div>';
+  }
+
+  // Seznam záznamů
+  var recList='';
+  for(var ri=recs.length-1;ri>=0;ri--){
+    var r=recs[ri];
+    var sc=r.score||0;
+    var scCol=sc>=91?'var(--acc)':sc>=88?'#FACC15':'var(--muted2)';
+    var dp=r.date?r.date.slice(5).replace('-','.')+'.'+(r.date.slice(0,4)):'';
+    recList+='<div class="ib-rec">'
+      +'<div class="ib-score" style="background:'+scCol+'22;border:1px solid '+scCol+';color:'+scCol+';">'+sc+'</div>'
+      +'<div style="flex:1;padding:0 6px;">'
+        +'<div style="font-size:8px;font-weight:700;">'+dp+'</div>'
+        +'<div style="font-size:7px;color:var(--muted);">'
+          +(r.weight?r.weight+' kg ':'')+' | '
+          +(r.fat?r.fat+'% tuk ':'')+' | '
+          +(r.smm?r.smm+' kg SMM':'')
+        +'</div>'
+      +'</div>'
+      +'<button class="ib-del" data-ri="'+ri+'" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:12px;padding:2px 4px;">✕</button>'
+      +'</div>';
+  }
+
+  // Formulář pro nový záznam
+  var today=new Date().toISOString().slice(0,10);
+  var formHtml='<div style="padding:10px;">'
+    +'<div style="font-size:8px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">Přidat měření</div>'
+    +'<div class="ib-form-grid">'
+    +'<div class="ib-inp-wrap"><div class="ib-inp-lbl">Datum</div><input class="ib-inp" id="ib-date" type="date" value="'+today+'"></div>'
+    +'<div class="ib-inp-wrap"><div class="ib-inp-lbl">Váha (kg)</div><input class="ib-inp" id="ib-weight" type="number" placeholder="81.5"></div>'
+    +'<div class="ib-inp-wrap"><div class="ib-inp-lbl">% Tuku</div><input class="ib-inp" id="ib-fat" type="number" placeholder="11.8"></div>'
+    +'<div class="ib-inp-wrap"><div class="ib-inp-lbl">Tuk (kg)</div><input class="ib-inp" id="ib-fatkg" type="number" placeholder="9.6"></div>'
+    +'<div class="ib-inp-wrap"><div class="ib-inp-lbl">SMM svaly (kg)</div><input class="ib-inp" id="ib-smm" type="number" placeholder="41.2"></div>'
+    +'<div class="ib-inp-wrap"><div class="ib-inp-lbl">BMI</div><input class="ib-inp" id="ib-bmi" type="number" placeholder="24.6"></div>'
+    +'<div class="ib-inp-wrap"><div class="ib-inp-lbl">InBody skóre</div><input class="ib-inp" id="ib-score" type="number" placeholder="90"></div>'
+    +'<div class="ib-inp-wrap"><div class="ib-inp-lbl">BMR (kcal)</div><input class="ib-inp" id="ib-bmr" type="number" placeholder="1923"></div>'
+    +'</div>'
+    +'<button id="ib-save" class="btn btn-acc" style="width:100%;justify-content:center;padding:8px;">Uložit měření</button>'
+    +'</div>';
+
+  return '<div class="card" style="padding:0;overflow:hidden;">'
+    +'<div style="padding:8px 10px 6px;background:var(--bg3);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">'
+    +'<span style="font-size:8px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">InBody / Tanita analýza</span>'
+    +'<span style="font-size:7px;color:var(--muted2);">'+recs.length+' měření</span>'
+    +'</div>'
+    +(recs.length
+      ?'<div class="ib-wrap" style="padding:10px;">'
+        +'<div class="ib-silhouette">'+silSvg+'</div>'
+        +'<div class="ib-charts">'+charts+'</div>'
+      +'</div>'
+      :'<div style="padding:12px;color:var(--muted);font-size:10px;text-align:center;">Přidej první InBody měření níže</div>')
+    +(recs.length?'<div style="border-top:1px solid var(--border);">'+recList+'</div>':'')
+    +'<div style="border-top:1px solid var(--border);">'+formHtml+'</div>'
+    +'</div>';
+}
+
+function bInBody(){
+  var recs=getInBody();
+  var save=document.getElementById('ib-save');
+  if(save){
+    save.addEventListener('click',function(){
+      var dt=document.getElementById('ib-date').value;
+      var w=parseFloat(document.getElementById('ib-weight').value);
+      var f=parseFloat(document.getElementById('ib-fat').value);
+      var fk=parseFloat(document.getElementById('ib-fatkg').value);
+      var sm=parseFloat(document.getElementById('ib-smm').value);
+      var bm=parseFloat(document.getElementById('ib-bmi').value);
+      var sc=parseInt(document.getElementById('ib-score').value);
+      var br=parseInt(document.getElementById('ib-bmr').value);
+      if(!dt||isNaN(w)){alert('Zadej alespoň datum a váhu.');return;}
+      recs.push({date:dt,weight:w,fat:isNaN(f)?null:f,fatKg:isNaN(fk)?null:fk,smm:isNaN(sm)?null:sm,bmi:isNaN(bm)?null:bm,score:isNaN(sc)?null:sc,bmr:isNaN(br)?null:br});
+      setInBody(recs);
+      render();
+    });
+  }
+  var dels=document.querySelectorAll('.ib-del');
+  for(var i=0;i<dels.length;i++){
+    dels[i].addEventListener('click',function(){
+      var ri=+this.dataset.ri;
+      if(confirm('Smazat toto měření?')){recs.splice(ri,1);setInBody(recs);render();}
+    });
+  }
+}
+
 function rBody(m){
   var metrics=getM(m),defs=getDefs(),ss2=getSuns(m);
 
@@ -960,7 +1193,7 @@ function rBody(m){
   for(var i=0;i<5;i++){
     var s=ss2[i];sunHdrs+=s?'<th>'+s.getDate()+'.'+(s.getMonth()+1)+'.</th>':'<th>—</th>';
   }
-  var html=calcHtml;
+  var html=rInBody()+calcHtml;
   html+=(bars?'<div class="card"><div class="card-title">Aktuální hodnoty</div>'+bars+'</div>':'<div class="card"><div style="color:var(--muted);font-size:11px;text-align:center;padding:8px;">Zatím žádná data — zadej první měření níže</div></div>');
   if(lines)html+='<div class="card"><div class="card-title">Vývoj v měsíci</div><svg viewBox="0 0 300 75" style="width:100%;height:70px;" preserveAspectRatio="none">'+lines+'</svg></div>';
   html+='<div class="card" style="padding:0;overflow:hidden;">'
@@ -1382,6 +1615,7 @@ function bYear(){
 // INIT
 function init(){
   bindKbHide();
+  initInBodyDefaults();
   buildMnav();updateBUI();autoBackup();
   document.getElementById('mname').textContent=MONTHS[S.month];
   setTimeout(function(){var a=document.querySelector('.mbtn.on');if(a)a.scrollIntoView({inline:'center',behavior:'smooth'});},100);
