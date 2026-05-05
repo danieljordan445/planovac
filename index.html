@@ -311,7 +311,7 @@ function setTab(t){
   S.tab=t;S.fd=null;S.delMode=false;
   var btns=document.querySelectorAll('.nbtn');
   for(var i=0;i<btns.length;i++)btns[i].classList.toggle('on',btns[i].dataset.t===t);
-  var sm=(t==='habits'||t==='nutrition'||t==='calendar');
+  var sm=(t==='habits'||t==='nutrition'||t==='calendar'||t==='body');
   document.getElementById('mnav').style.display=sm?'flex':'none';
   document.getElementById('hmonth').style.display=sm?'flex':'none';
   render();
